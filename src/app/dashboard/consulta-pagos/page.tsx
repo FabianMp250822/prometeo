@@ -9,21 +9,45 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Search, UserCircle, FileText, AlertCircle, ChevronLeft, ChevronRight, ListChecks, CalendarDays } from 'lucide-react';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Loader2, Search, UserCircle, FileText, AlertCircle, ChevronLeft, ChevronRight, ListChecks, CalendarDays, TrendingUp, TrendingDown, DollarSign, Hash } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Define interfaces for data structures
-interface Pensionado {
+interface Pariss1Data {
+  Comparte?: Timestamp;
+  afilia?: string;
+  cedula?: string; // This is the link ID
+  ciudad_iss?: string;
+  dir_iss?: string;
+  fe_adquiere?: Timestamp;
+  fe_causa?: Timestamp;
+  fe_ingreso?: Timestamp;
+  fe_nacido?: Timestamp;
+  fe_vinculado?: Timestamp;
+  identifica?: number;
+  mesada?: number;
+  pension_ini?: number;
+  regimen?: number;
+  res_ano?: number;
+  res_nro?: string;
+  riesgo?: string;
+  seguro?: number;
+  semanas?: number;
+  sexo?: number;
+  telefono_iss?: number;
+  tranci?: boolean;
+}
+
+interface Pensionado extends Pariss1Data { // Merged Pariss1Data here
   id: string; 
   ano_jubilacion?: string;
   basico?: string;
   cargo?: string;
-  centroCosto?: string;
-  centroCosto1?: string;
-  dependencia?: string;
-  dependencia1?: string;
+  // centroCosto?: string; // From pariss1 typically or use pnlCentroCosto
+  // centroCosto1?: string;
+  // dependencia?: string; // From pariss1 typically or use pnlDependencia
+  // dependencia1?: string;
   documento?: string;
   dtgLiquidacion?: string;
   empleado?: string;
@@ -32,16 +56,16 @@ interface Pensionado {
   fecha?: string; 
   fondoSalud?: string;
   grado?: string;
-  hBasico?: string;
-  hCargo?: string;
-  hEsquema?: string;
-  hGrado?: string;
+  // hBasico?: string; // These seem like header/label strings, not data for a specific pensioner
+  // hCargo?: string;
+  // hEsquema?: string;
+  // hGrado?: string;
   mensaje?: string;
-  neto?: string;
+  neto?: string; // This seems to be a total, not directly part of pensioner base info
   nitEmpresa?: string;
-  nivContratacion?: string;
-  nivContratacion2?: string;
-  periodoPago?: string; 
+  // nivContratacion?: string;
+  // nivContratacion2?: string;
+  // periodoPago?: string; // This is part of a specific 'pago', not general pensioner info
   pnlCentroCosto?: string;
   pnlDependencia?: string;
   pnlMensaje?: string;
@@ -69,11 +93,20 @@ interface Pago {
   valorNeto?: string;
 }
 
-interface PagosByYear {
-  [year: string]: Pago[];
+interface PagosYearSummary {
+  count: number;
+  avgNeto: number;
+  maxNeto: number;
+  minNeto: number;
 }
 
+interface PagosAnualesStats {
+  [year: string]: PagosYearSummary;
+}
+
+
 const PENSIONADOS_COLLECTION = "pensionados";
+const PARISS1_COLLECTION = "pariss1";
 const PAGOS_SUBCOLLECTION = "pagos";
 const ITEMS_PER_PAGE = 10;
 
@@ -81,8 +114,9 @@ export default function ConsultaPagosPage() {
   const { toast } = useToast();
   const [documentoInput, setDocumentoInput] = useState<string>("");
   const [selectedPensionado, setSelectedPensionado] = useState<Pensionado | null>(null);
-  const [pagosList, setPagosList] = useState<Pago[]>([]); // Flat list of all payments for the selected pensioner
-  const [pagosByYear, setPagosByYear] = useState<PagosByYear>({}); // Payments grouped by year for display
+  const [pagosList, setPagosList] = useState<Pago[]>([]);
+  const [pagosAnualesStats, setPagosAnualesStats] = useState<PagosAnualesStats>({});
+  
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isListLoading, setIsListLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,10 +130,9 @@ export default function ConsultaPagosPage() {
   const [searchResults, setSearchResults] = useState<Pensionado[]>([]);
   const [viewMode, setViewMode] = useState<'initial' | 'list' | 'details'>('initial');
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalResults, setTotalResults] = useState(0);
+  const [totalResults, setTotalResults] = useState(0); // More accurately, a flag for "more results exist"
   const [lastVisibleDoc, setLastVisibleDoc] = useState<DocumentData | null>(null);
-  const [firstVisibleDoc, setFirstVisibleDoc] = useState<DocumentData | null>(null);
-
+  const [firstVisibleDoc, setFirstVisibleDoc] = useState<DocumentData | null>(null); // For 'prev' page, though not fully implemented with cursors
 
   useEffect(() => {
     const fetchFilterOptions = async () => {
@@ -158,19 +191,19 @@ export default function ConsultaPagosPage() {
       if (page > 1 && startAfterDoc) {
         pensionadosQuery = query(collection(db, PENSIONADOS_COLLECTION), ...queryConstraints, startAfter(startAfterDoc), limit(ITEMS_PER_PAGE + 1));
       } else if (page === 1) {
-         setLastVisibleDoc(null); 
+         setLastVisibleDoc(null); // Reset for first page
       }
 
 
       const pensionadosSnapshot = await getDocs(pensionadosQuery);
       const pensionadosData = pensionadosSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Pensionado));
 
-      setFirstVisibleDoc(pensionadosSnapshot.docs[0] || null);
+      setFirstVisibleDoc(pensionadosSnapshot.docs[0] || null); // For potential 'prev' logic
       setLastVisibleDoc(pensionadosSnapshot.docs[pensionadosSnapshot.docs.length - (pensionadosData.length > ITEMS_PER_PAGE ? 2 : 1)] || null);
 
 
       setSearchResults(pensionadosData.slice(0, ITEMS_PER_PAGE));
-      setTotalResults(pensionadosData.length); 
+      setTotalResults(pensionadosData.length); // Used to determine if "Next" should be enabled
 
       if (pensionadosData.length === 0) {
         toast({ title: "Sin Resultados", description: "No se encontraron pensionados con los filtros seleccionados.", variant: "default" });
@@ -181,10 +214,21 @@ export default function ConsultaPagosPage() {
     } catch (err: any) {
       console.error("Error searching pensioners by filters:", err);
       setError("Ocurrió un error al buscar por filtros: " + err.message);
-      toast({ title: "Error de Búsqueda", description: err.message.includes("indexes") ? "La consulta requiere un índice. Revisa la consola para crearlo." : "No se pudo completar la búsqueda.", variant: "destructive" });
+      let toastMessage = "No se pudo completar la búsqueda.";
+      if (err.message && err.message.includes("indexes")) {
+          toastMessage = "La consulta requiere un índice compuesto en Firestore. Revisa la consola del navegador para ver el enlace y crearlo.";
+      }
+      toast({ title: "Error de Búsqueda", description: toastMessage, variant: "destructive" });
     } finally {
       setIsListLoading(false);
     }
+  };
+  
+  const parseCurrencyToNumber = (currencyString: string | undefined | null): number => {
+    if (!currencyString) return 0;
+    const cleanedString = currencyString.replace(/\./g, '').replace(',', '.');
+    const number = parseFloat(cleanedString);
+    return isNaN(number) ? 0 : number;
   };
 
   const fetchPensionadoDetails = async (pensionadoId: string) => {
@@ -192,53 +236,85 @@ export default function ConsultaPagosPage() {
     setError(null);
     setSelectedPensionado(null);
     setPagosList([]);
-    setPagosByYear({});
+    setPagosAnualesStats({});
 
     try {
       const pensionadoDocRef = doc(db, PENSIONADOS_COLLECTION, pensionadoId);
       const pensionadoDocSnap = await getDoc(pensionadoDocRef);
 
       if (pensionadoDocSnap.exists()) {
-        const pensionadoData = { id: pensionadoDocSnap.id, ...pensionadoDocSnap.data() } as Pensionado;
+        let pensionadoData = { id: pensionadoDocSnap.id, ...pensionadoDocSnap.data() } as Pensionado;
+
+        // Fetch additional details from pariss1
+        const pariss1DocRef = doc(db, PARISS1_COLLECTION, pensionadoId); // Assuming pensionadoId is the doc ID for pariss1 as well
+        const pariss1DocSnap = await getDoc(pariss1DocRef);
+        if (pariss1DocSnap.exists()) {
+          pensionadoData = { ...pensionadoData, ...pariss1DocSnap.data() as Pariss1Data };
+          toast({ title: "Información Adicional", description: "Detalles de Pariss1 cargados.", variant: "default" });
+        } else {
+          toast({ title: "Advertencia", description: "No se encontraron detalles adicionales en Pariss1 para este pensionado.", variant: "default" });
+        }
         setSelectedPensionado(pensionadoData);
         setViewMode('details');
-
+        
+        // Fetch payments
         const pagosCollectionRef = collection(db, PENSIONADOS_COLLECTION, pensionadoData.id, PAGOS_SUBCOLLECTION);
-        // Order by año descending, then by fechaProcesado descending.
-        // This query will likely require a composite index on 'año' and 'fechaProcesado'.
-        // If 'año' is not suitable for direct Firestore ordering (e.g., inconsistent format),
-        // revert to orderBy("fechaProcesado", "desc") and handle year sorting client-side.
         const pagosQuery = query(pagosCollectionRef, orderBy("año", "desc"), orderBy("fechaProcesado", "desc"));
         
+        console.log(`Consulta Pagos: Intentando obtener pagos para ${pensionadoData.id} desde ${pagosCollectionRef.path}`);
         const pagosSnapshot = await getDocs(pagosQuery);
-        const pagos = pagosSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Pago));
-        setPagosList(pagos); // Keep the flat list, useful for total count etc.
+        console.log(`Consulta Pagos: Se encontraron ${pagosSnapshot.docs.length} documentos de pago para ${pensionadoData.id}. Vacío: ${pagosSnapshot.empty}`);
 
-        // Group payments by year for display
-        const groupedByYear = pagos.reduce<PagosByYear>((acc, pago) => {
-          const yearKey = pago.año || "Sin Año";
-          if (!acc[yearKey]) {
-            acc[yearKey] = [];
+        const pagos = pagosSnapshot.docs.map(docSnap => {
+            const data = docSnap.data();
+            // console.log(`Consulta Pagos: Datos brutos del doc de pago ${docSnap.id}:`, JSON.stringify(data));
+            return { id: docSnap.id, ...data } as Pago;
+        });
+        setPagosList(pagos);
+
+        if (pagos.length > 0) {
+          const stats: PagosAnualesStats = {};
+          const groupedByYear = pagos.reduce<Record<string, Pago[]>>((acc, pago) => {
+            const yearKey = pago.año || "Sin Año";
+            if (!acc[yearKey]) acc[yearKey] = [];
+            acc[yearKey].push(pago);
+            return acc;
+          }, {});
+
+          for (const year in groupedByYear) {
+            const yearPagos = groupedByYear[year];
+            const netos = yearPagos.map(p => parseCurrencyToNumber(p.valorNeto)).filter(n => n !== 0); // filter out 0s if they are not valid payments
+            if (netos.length > 0) {
+              stats[year] = {
+                count: yearPagos.length,
+                avgNeto: netos.reduce((sum, val) => sum + val, 0) / netos.length,
+                maxNeto: Math.max(...netos),
+                minNeto: Math.min(...netos),
+              };
+            } else {
+               stats[year] = { count: yearPagos.length, avgNeto: 0, maxNeto: 0, minNeto: 0 };
+            }
           }
-          acc[yearKey].push(pago);
-          return acc;
-        }, {});
-        setPagosByYear(groupedByYear);
-
-        if (pagos.length === 0) {
-          toast({ title: "Información", description: "Pensionado encontrado, pero no tiene pagos registrados.", variant: "default" });
+          setPagosAnualesStats(stats);
+        } else {
+          console.warn(`Consulta Pagos: No se encontraron pagos efectivos para ${pensionadoData.id}, 'pagosList' está vacío.`);
+          setPagosAnualesStats({}); // Asegurarse de que las estadísticas también estén vacías
+          // El mensaje de "No hay pagos" se maneja en la UI basado en pagosList.length
         }
+
       } else {
         setError("No se encontró el pensionado para ver detalles.");
         toast({ title: "No encontrado", description: "Error al cargar detalles del pensionado.", variant: "destructive" });
         setViewMode('list'); 
       }
     } catch (err: any) {
-      console.error("Error fetching pensioner details:", err);
+      console.error("Error fetching pensioner details or payments:", err);
       setError("Ocurrió un error al cargar detalles: " + err.message);
-      let toastMessage = "No se pudo cargar la información.";
-      if (err.message && err.message.includes("indexes") && err.message.includes("año")) {
-        toastMessage = "La consulta de pagos por año requiere un índice compuesto en Firestore. Revisa la consola para crearlo (año DESC, fechaProcesado DESC).";
+      let toastMessage = "No se pudo cargar la información del pensionado o sus pagos.";
+      if (err.message && err.message.includes("indexes") && (err.message.includes("año") || err.message.includes("fechaProcesado"))) {
+        toastMessage = "La consulta de pagos requiere un índice compuesto en Firestore. Revisa la consola del navegador para ver el enlace y crearlo (índice en subcolección 'pagos': año DESC, fechaProcesado DESC).";
+      } else if (err.message && err.message.includes("indexes")) {
+         toastMessage = "La consulta de pensionados por filtro requiere un índice compuesto en Firestore. Revisa la consola del navegador para crearlo.";
       }
       toast({ title: "Error", description: toastMessage, variant: "destructive" });
     } finally {
@@ -247,53 +323,88 @@ export default function ConsultaPagosPage() {
   };
 
   const handleSearch = () => {
+    // Reset all relevant states for a new search
     setSelectedPensionado(null);
     setPagosList([]);
-    setPagosByYear({});
-    setViewMode('initial'); 
+    setPagosAnualesStats({});
+    setSearchResults([]); // Clear previous list results
     setError(null);
     setCurrentPage(1);
     setLastVisibleDoc(null);
-
+    setFirstVisibleDoc(null);
 
     if (documentoInput.trim()) {
       fetchPensionadoDetails(documentoInput.trim());
     } else if (filterCentroCosto || filterDependencia) {
-      fetchPensionadosByFilters(1);
+      fetchPensionadosByFilters(1); // Start search from page 1
     } else {
       toast({ title: "Información requerida", description: "Ingrese un número de documento o seleccione filtros.", variant: "destructive" });
+      setViewMode('initial');
     }
   };
   
   const handleNextPage = () => {
-    if (totalResults > ITEMS_PER_PAGE) { 
+    if (totalResults > ITEMS_PER_PAGE) { // totalResults here means more items might exist
       fetchPensionadosByFilters(currentPage + 1, lastVisibleDoc);
     }
   };
 
-  const handlePrevPage = () => {
+  const handlePrevPage = async () => {
+     // Basic prev page, ideally would use cursors (endBefore) which is more complex
     if (currentPage > 1) {
-        fetchPensionadosByFilters(currentPage - 1, null); 
+        // This is a simplified way. For true cursor-based prev, you'd need to store first docs of pages.
+        // For now, just re-querying up to the previous page start.
+        // This might not be perfectly accurate without endBefore.
+        // Consider disabling "Prev" or implementing full cursor logic if this is critical.
+        // For this example, we'll just call fetch with page-1, which will restart the query for that segment.
+        fetchPensionadosByFilters(currentPage - 1, null); // This will effectively re-query from the start for page N-1
     }
   };
   
-  const formatFirebaseTimestamp = (timestamp: Timestamp | undefined): string => {
+  const formatFirebaseTimestamp = (timestamp: Timestamp | undefined | string): string => {
     if (!timestamp) return 'N/A';
-    try { return timestamp.toDate().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }); } 
-    catch (e) { return 'Fecha inválida'; }
+    try {
+      if (typeof timestamp === 'string') { // Handle potential date strings from Pariss1 if not Timestamps
+        return new Date(timestamp).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+      }
+      return timestamp.toDate().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+    } catch (e) {
+      console.warn("Could not format timestamp:", timestamp, e);
+      return 'Fecha inválida';
+    }
   };
 
-  const formatCurrency = (value: string | number | undefined | null): string => {
-    if (value === undefined || value === null) return '$0,00';
-    let numValue = typeof value === 'string' ? parseFloat(value.replace(/\./g, '').replace(',', '.')) : value;
-    if (isNaN(numValue)) return '$0,00';
-    return `$${numValue.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const formatCurrency = (value: string | number | undefined | null, addSymbol: boolean = true): string => {
+    if (value === undefined || value === null) return addSymbol ? '$0,00' : '0,00';
+    let numValue = typeof value === 'string' ? parseCurrencyToNumber(value) : value;
+    if (isNaN(numValue)) return addSymbol ? '$0,00' : '0,00';
+    const prefix = addSymbol ? '$' : '';
+    return `${prefix}${numValue.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  const formatSexo = (sexoCode?: number): string => {
+    if (sexoCode === undefined) return 'N/A';
+    if (sexoCode === 1) return 'Masculino'; // Assuming 1 is Male
+    if (sexoCode === 2) return 'Femenino';  // Assuming 2 is Female
+    return 'Otro';
   };
   
-  const formatNumberForDetails = (value: number | undefined | null): string => {
-    if (value === undefined || value === null) return '0';
-    return value.toLocaleString('es-CO');
-  }
+  const formatRegimen = (regimenCode?: number): string => {
+    // Example, replace with actual meanings
+    if (regimenCode === undefined) return 'N/A';
+    if (regimenCode === 1) return 'Régimen A';
+    if (regimenCode === 2) return 'Régimen B (Transición)';
+    return `Código ${regimenCode}`;
+  };
+
+  const formatRiesgo = (riesgoCode?: string): string => {
+    if (!riesgoCode) return 'N/A';
+    if (riesgoCode === 'V') return 'Vejez';
+    if (riesgoCode === 'I') return 'Invalidez';
+    if (riesgoCode === 'S') return 'Sobrevivencia';
+    return riesgoCode;
+  };
+
 
   const handleClearFiltersAndSearch = () => {
     setDocumentoInput("");
@@ -301,19 +412,20 @@ export default function ConsultaPagosPage() {
     setFilterDependencia(undefined);
     setSelectedPensionado(null);
     setPagosList([]);
-    setPagosByYear({});
+    setPagosAnualesStats({});
     setSearchResults([]);
     setError(null);
     setViewMode('initial');
     setCurrentPage(1);
     setLastVisibleDoc(null);
+    setFirstVisibleDoc(null);
     toast({ title: "Filtros limpiados", description: "Realice una nueva búsqueda."});
   };
   
-  const sortedYears = Object.keys(pagosByYear).sort((a, b) => {
-    if (a === "Sin Año") return 1; // "Sin Año" always last
+  const sortedYearsForStats = Object.keys(pagosAnualesStats).sort((a, b) => {
+    if (a === "Sin Año") return 1;
     if (b === "Sin Año") return -1;
-    return b.localeCompare(a); // Sort numerically descending for years
+    return b.localeCompare(a); 
   });
 
 
@@ -322,10 +434,10 @@ export default function ConsultaPagosPage() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="text-2xl font-headline text-primary flex items-center">
-            <Search className="mr-3 h-7 w-7" /> Consulta de Pagos de Pensionados
+            <Search className="mr-3 h-7 w-7" /> Consulta y Resumen de Pagos
           </CardTitle>
           <CardDescription>
-            Busque por documento o filtre por Centro de Costo / Dependencia para listar pensionados.
+            Busque por documento o filtre para listar pensionados y ver un resumen anual de sus pagos.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -441,78 +553,67 @@ export default function ConsultaPagosPage() {
                 <UserCircle className="mr-2 h-6 w-6" /> Información del Pensionado
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-1 text-sm">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1">
-                  <p><strong>Nombre:</strong> {selectedPensionado.empleado || 'N/A'}</p>
-                  <p><strong>Documento:</strong> {selectedPensionado.id}</p>
-                  <p><strong>Cargo:</strong> {selectedPensionado.cargo || 'N/A'}</p>
-                  <p><strong>Empresa:</strong> {selectedPensionado.empresa || 'N/A'}</p>
-                  <p><strong>C. Costo:</strong> {selectedPensionado.pnlCentroCosto || 'N/A'}</p>
-                  <p><strong>Dependencia:</strong> {selectedPensionado.pnlDependencia?.replace(/^V\d+-/, '') || 'N/A'}</p>
-                  <p><strong>Esquema:</strong> {selectedPensionado.esquema || 'N/A'}</p>
-                  <p><strong>Año Jubilación:</strong> {selectedPensionado.ano_jubilacion || 'N/A'}</p>
-                  <p><strong>Fondo Salud:</strong> {selectedPensionado.fondoSalud || 'N/A'}</p>
+            <CardContent className="space-y-2 text-sm">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3">
+                  <div><strong>Nombre:</strong> {selectedPensionado.empleado || 'N/A'}</div>
+                  <div><strong>Documento:</strong> {selectedPensionado.id}</div>
+                  <div><strong>Cargo:</strong> {selectedPensionado.cargo || 'N/A'}</div>
+                  <div><strong>Empresa:</strong> {selectedPensionado.empresa || 'N/A'}</div>
+                  <div><strong>C. Costo:</strong> {selectedPensionado.pnlCentroCosto || 'N/A'}</div>
+                  <div><strong>Dependencia:</strong> {selectedPensionado.pnlDependencia?.replace(/^V\d+-/, '') || 'N/A'}</div>
+                  <div><strong>Esquema:</strong> {selectedPensionado.esquema || 'N/A'}</div>
+                  <div><strong>Año Jubilación:</strong> {selectedPensionado.ano_jubilacion || 'N/A'}</div>
+                  <div><strong>Fondo Salud:</strong> {selectedPensionado.fondoSalud || 'N/A'}</div>
+                  
+                  {/* Pariss1 Data */}
+                  <div><strong>Fecha Nacimiento:</strong> {formatFirebaseTimestamp(selectedPensionado.fe_nacido)}</div>
+                  <div><strong>Ciudad ISS:</strong> {selectedPensionado.ciudad_iss || 'N/A'}</div>
+                  <div><strong>Semanas Cotizadas:</strong> {selectedPensionado.semanas !== undefined ? selectedPensionado.semanas : 'N/A'}</div>
+                  <div><strong>Sexo:</strong> {formatSexo(selectedPensionado.sexo)}</div>
+                  <div><strong>Régimen:</strong> {formatRegimen(selectedPensionado.regimen)}</div>
+                  <div><strong>Tipo Riesgo:</strong> {formatRiesgo(selectedPensionado.riesgo)}</div>
+                  <div><strong>Fecha Adquiere Derecho:</strong> {formatFirebaseTimestamp(selectedPensionado.fe_adquiere)}</div>
+                  <div><strong>Fecha Causación:</strong> {formatFirebaseTimestamp(selectedPensionado.fe_causa)}</div>
+                  <div><strong>Fecha Ingreso ISS:</strong> {formatFirebaseTimestamp(selectedPensionado.fe_ingreso)}</div>
               </div>
             </CardContent>
           </Card>
 
-          {pagosList.length > 0 && (
-            <Card className="shadow-md">
+          {pagosList.length > 0 && Object.keys(pagosAnualesStats).length > 0 && (
+            <Card className="shadow-md mt-6">
               <CardHeader>
                 <CardTitle className="text-xl font-headline text-primary flex items-center">
-                  <CalendarDays className="mr-2 h-6 w-6" /> Historial de Pagos ({pagosList.length})
+                  <CalendarDays className="mr-2 h-6 w-6" /> Resumen Anual de Pagos ({pagosList.length} pagos totales)
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                {sortedYears.map(year => (
-                  <div key={year} className="mb-8 last:mb-0">
-                    <h3 className="text-lg font-semibold mb-3 text-foreground border-b pb-2">Año: {year}</h3>
-                    {pagosByYear[year] && pagosByYear[year].length > 0 ? (
-                      <Accordion type="single" collapsible className="w-full space-y-2">
-                        {pagosByYear[year].map((pago) => (
-                          <AccordionItem value={pago.id} key={pago.id} className="border border-border hover:bg-muted/10 rounded-md">
-                            <AccordionTrigger className="hover:bg-muted/30 px-3 py-3 rounded-t-md text-sm data-[state=open]:rounded-b-none data-[state=open]:border-b data-[state=open]:border-primary/20">
-                              <div className="flex flex-col md:flex-row justify-between w-full items-start md:items-center gap-1 md:gap-4">
-                                  <span className="font-semibold">Periodo: {pago.periodoPago || 'N/A'}</span>
-                                  <span className="text-muted-foreground text-xs md:text-sm">F. Liquidación: {pago.fechaLiquidacion || 'N/A'}</span>
-                                  <span className="text-primary font-medium">Neto: {formatCurrency(pago.valorNeto)}</span>
-                              </div>
-                            </AccordionTrigger>
-                            <AccordionContent className="p-4 bg-background border-t border-primary/20 rounded-b-md">
-                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-2 mb-4 text-sm">
-                                  <p><strong>Básico:</strong> {formatCurrency(pago.basico)}</p>
-                                  <p><strong>V. Liquidado:</strong> {formatCurrency(pago.valorLiquidado)}</p>
-                                  <p><strong>F. Procesado:</strong> {formatFirebaseTimestamp(pago.fechaProcesado)}</p>
-                                  <p><strong>Grado:</strong> {pago.grado || 'N/A'}</p>
-                                  <p><strong>Procesado:</strong> {pago.procesado ? 'Sí' : 'No'}</p>
-                              </div>
-                              <h4 className="font-semibold text-md mb-2 text-foreground">Detalles del Pago:</h4>
-                              {pago.detalles && pago.detalles.length > 0 ? (
-                                <div className="overflow-x-auto rounded-md border"><Table className="min-w-full text-xs sm:text-sm">
-                                    <TableHeader className="bg-muted/50"><TableRow>
-                                        <TableHead className="w-[45%] font-medium">Concepto (Nombre)</TableHead>
-                                        <TableHead className="font-medium">Código</TableHead>
-                                        <TableHead className="text-right font-medium">Ingresos</TableHead>
-                                        <TableHead className="text-right font-medium">Egresos</TableHead>
-                                    </TableRow></TableHeader>
-                                    <TableBody>{pago.detalles.map((detalle, index) => (
-                                        <TableRow key={index} className={detalle.nombre === "Totales:" ? "font-bold bg-muted/20" : "hover:bg-muted/10"}>
-                                        <TableCell>{detalle.nombre}</TableCell>
-                                        <TableCell>{detalle.codigo || 'N/A'}</TableCell>
-                                        <TableCell className="text-right">{formatNumberForDetails(detalle.ingresos)}</TableCell>
-                                        <TableCell className="text-right">{formatNumberForDetails(detalle.egresos)}</TableCell>
-                                        </TableRow>))}
-                                    </TableBody></Table></div>
-                              ) : (<p className="text-sm text-muted-foreground">No hay detalles disponibles para este pago.</p>)}
-                            </AccordionContent>
-                          </AccordionItem>
-                        ))}
-                      </Accordion>
-                    ) : (
-                       <p className="text-sm text-muted-foreground">No hay pagos registrados para el año {year}.</p>
-                    )}
-                  </div>
-                ))}
+              <CardContent className="space-y-4">
+                {sortedYearsForStats.map(year => {
+                  const stats = pagosAnualesStats[year];
+                  if (!stats) return null;
+                  return (
+                    <div key={year} className="p-4 border rounded-lg shadow-sm bg-muted/20 hover:shadow-md transition-shadow">
+                      <h3 className="text-lg font-semibold text-foreground mb-3">Año: {year}</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                        <div className="flex items-center space-x-2 p-2 bg-background rounded-md">
+                            <Hash className="h-5 w-5 text-primary/70"/>
+                            <div><strong>Pagos:</strong> {stats.count}</div>
+                        </div>
+                        <div className="flex items-center space-x-2 p-2 bg-background rounded-md">
+                            <DollarSign className="h-5 w-5 text-green-600"/>
+                            <div><strong>Promedio Neto:</strong> {formatCurrency(stats.avgNeto)}</div>
+                        </div>
+                        <div className="flex items-center space-x-2 p-2 bg-background rounded-md">
+                            <TrendingUp className="h-5 w-5 text-blue-600"/>
+                            <div><strong>Neto Máximo:</strong> {formatCurrency(stats.maxNeto)}</div>
+                        </div>
+                        <div className="flex items-center space-x-2 p-2 bg-background rounded-md">
+                            <TrendingDown className="h-5 w-5 text-red-600"/>
+                            <div><strong>Neto Mínimo:</strong> {formatCurrency(stats.minNeto)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </CardContent>
             </Card>
           )}
@@ -523,7 +624,7 @@ export default function ConsultaPagosPage() {
                     <div className="text-center text-muted-foreground py-8">
                         <FileText className="mx-auto h-16 w-16 mb-3 text-primary/30" />
                         <p className="text-lg">No se encontraron registros de pago.</p>
-                        <p className="text-sm">El pensionado seleccionado no tiene historial de pagos en el sistema.</p>
+                        <p className="text-sm">El pensionado seleccionado no tiene historial de pagos en el sistema. Verifica los índices de Firestore si crees que esto es un error.</p>
                     </div>
                 </CardContent>
             </Card>
@@ -545,3 +646,4 @@ export default function ConsultaPagosPage() {
     </div>
   );
 }
+
