@@ -105,7 +105,7 @@ export default function DashboardLayoutComponent({ children }: { children: React
           <SidebarMenu>
             {navItems.map((item) => (
               <SidebarMenuItem key={item.href}>
-                <Link href={item.href} legacyBehavior passHref>
+                <Link href={item.href}>
                   <SidebarMenuButton
                     className="w-full justify-start text-base"
                     isActive={pathname === item.href}
@@ -158,7 +158,7 @@ export default function DashboardLayoutComponent({ children }: { children: React
             <SidebarMenu>
               {navItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <Link href={item.href} legacyBehavior passHref>
+                  <Link href={item.href}>
                     <SidebarMenuButton
                       className="w-full justify-start"
                       isActive={pathname === item.href}
