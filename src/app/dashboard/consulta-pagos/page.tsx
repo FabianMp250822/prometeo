@@ -257,7 +257,7 @@ export default function ConsultaPagosPage() {
         setSelectedPensionado(pensionadoData);
         setViewMode('details');
         
-        // Fetch payments
+        // Fetch payments from subcollection
         const pagosCollectionRef = collection(db, PENSIONADOS_COLLECTION, pensionadoData.id, PAGOS_SUBCOLLECTION);
         const pagosQuery = query(pagosCollectionRef, orderBy("año", "desc"), orderBy("fechaProcesado", "desc"));
         
@@ -298,8 +298,7 @@ export default function ConsultaPagosPage() {
           setPagosAnualesStats(stats);
         } else {
           console.warn(`Consulta Pagos: No se encontraron pagos efectivos para ${pensionadoData.id}, 'pagosList' está vacío.`);
-          setPagosAnualesStats({}); // Asegurarse de que las estadísticas también estén vacías
-          // El mensaje de "No hay pagos" se maneja en la UI basado en pagosList.length
+          setPagosAnualesStats({}); 
         }
 
       } else {
@@ -312,7 +311,7 @@ export default function ConsultaPagosPage() {
       setError("Ocurrió un error al cargar detalles: " + err.message);
       let toastMessage = "No se pudo cargar la información del pensionado o sus pagos.";
       if (err.message && err.message.includes("indexes") && (err.message.includes("año") || err.message.includes("fechaProcesado"))) {
-        toastMessage = "La consulta de pagos requiere un índice compuesto en Firestore. Revisa la consola del navegador para ver el enlace y crearlo (índice en subcolección 'pagos': año DESC, fechaProcesado DESC).";
+        toastMessage = `La consulta de pagos (ruta: ${PENSIONADOS_COLLECTION}/${pensionadoId}/${PAGOS_SUBCOLLECTION}) requiere un índice compuesto en Firestore. Revisa la consola del navegador para ver el enlace y crearlo (índice: año DESC, fechaProcesado DESC).`;
       } else if (err.message && err.message.includes("indexes")) {
          toastMessage = "La consulta de pensionados por filtro requiere un índice compuesto en Firestore. Revisa la consola del navegador para crearlo.";
       }
@@ -323,11 +322,10 @@ export default function ConsultaPagosPage() {
   };
 
   const handleSearch = () => {
-    // Reset all relevant states for a new search
     setSelectedPensionado(null);
     setPagosList([]);
     setPagosAnualesStats({});
-    setSearchResults([]); // Clear previous list results
+    setSearchResults([]); 
     setError(null);
     setCurrentPage(1);
     setLastVisibleDoc(null);
@@ -336,7 +334,7 @@ export default function ConsultaPagosPage() {
     if (documentoInput.trim()) {
       fetchPensionadoDetails(documentoInput.trim());
     } else if (filterCentroCosto || filterDependencia) {
-      fetchPensionadosByFilters(1); // Start search from page 1
+      fetchPensionadosByFilters(1); 
     } else {
       toast({ title: "Información requerida", description: "Ingrese un número de documento o seleccione filtros.", variant: "destructive" });
       setViewMode('initial');
@@ -344,27 +342,21 @@ export default function ConsultaPagosPage() {
   };
   
   const handleNextPage = () => {
-    if (totalResults > ITEMS_PER_PAGE) { // totalResults here means more items might exist
+    if (totalResults > ITEMS_PER_PAGE) { 
       fetchPensionadosByFilters(currentPage + 1, lastVisibleDoc);
     }
   };
 
   const handlePrevPage = async () => {
-     // Basic prev page, ideally would use cursors (endBefore) which is more complex
     if (currentPage > 1) {
-        // This is a simplified way. For true cursor-based prev, you'd need to store first docs of pages.
-        // For now, just re-querying up to the previous page start.
-        // This might not be perfectly accurate without endBefore.
-        // Consider disabling "Prev" or implementing full cursor logic if this is critical.
-        // For this example, we'll just call fetch with page-1, which will restart the query for that segment.
-        fetchPensionadosByFilters(currentPage - 1, null); // This will effectively re-query from the start for page N-1
+        fetchPensionadosByFilters(currentPage - 1, null); 
     }
   };
   
   const formatFirebaseTimestamp = (timestamp: Timestamp | undefined | string): string => {
     if (!timestamp) return 'N/A';
     try {
-      if (typeof timestamp === 'string') { // Handle potential date strings from Pariss1 if not Timestamps
+      if (typeof timestamp === 'string') { 
         return new Date(timestamp).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
       }
       return timestamp.toDate().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -384,13 +376,12 @@ export default function ConsultaPagosPage() {
 
   const formatSexo = (sexoCode?: number): string => {
     if (sexoCode === undefined) return 'N/A';
-    if (sexoCode === 1) return 'Masculino'; // Assuming 1 is Male
-    if (sexoCode === 2) return 'Femenino';  // Assuming 2 is Female
+    if (sexoCode === 1) return 'Masculino'; 
+    if (sexoCode === 2) return 'Femenino';  
     return 'Otro';
   };
   
   const formatRegimen = (regimenCode?: number): string => {
-    // Example, replace with actual meanings
     if (regimenCode === undefined) return 'N/A';
     if (regimenCode === 1) return 'Régimen A';
     if (regimenCode === 2) return 'Régimen B (Transición)';
