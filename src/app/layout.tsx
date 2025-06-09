@@ -5,8 +5,8 @@ import { Toaster } from '@/components/ui/toaster';
 import FirebaseProvider from '@/components/FirebaseProvider';
 
 export const metadata: Metadata = {
-  title: 'ConsorcioManager',
-  description: 'Gestión para Consorcio dajusticia',
+  title: 'Prometeo',
+  description: 'Sistema de Gestión Prometeo',
 };
 
 export default function RootLayout({

@@ -40,7 +40,7 @@ export default function LoginForm() {
       await signInWithEmailAndPassword(auth, data.email, data.password);
       toast({
         title: 'Inicio de sesión exitoso',
-        description: 'Bienvenido a ConsorcioManager.',
+        description: 'Bienvenido a Prometeo.',
       });
       router.push('/dashboard');
     } catch (error: any) {

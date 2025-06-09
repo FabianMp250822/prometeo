@@ -29,7 +29,7 @@ export default function ReportGeneratorButtons() {
     const doc = new jsPDF();
     
     doc.setFontSize(18);
-    doc.text("Reporte General de Casos - ConsorcioManager", 14, 22);
+    doc.text("Reporte General de Casos - Prometeo", 14, 22);
     doc.setFontSize(11);
     doc.setTextColor(100);
     doc.text(`Fecha de Generación: ${new Date().toLocaleDateString()}`, 14, 30);
@@ -40,7 +40,7 @@ export default function ReportGeneratorButtons() {
       body: sampleReportData.map(item => [item.id, item.caso, item.cliente, item.estado, item.fecha]),
       theme: 'striped',
       headStyles: { fillColor: [63, 81, 181] }, // #3F51B5 (Primary color)
-      styles: { font: "Inter", fontSize: 10 }, // Ensure Inter font is used if available in jsPDF
+      styles: { font: "Inter", fontSize: 10 }, 
       didDrawPage: (data) => {
         // Footer
         const pageCount = doc.getNumberOfPages();
@@ -49,7 +49,7 @@ export default function ReportGeneratorButtons() {
       }
     });
 
-    doc.save("reporte_casos_consorciomanager.pdf");
+    doc.save("reporte_casos_prometeo.pdf");
     toast({
       title: "Reporte PDF Generado",
       description: "El archivo PDF se ha descargado.",
@@ -72,17 +72,16 @@ export default function ReportGeneratorButtons() {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Casos");
 
-    // Adjust column widths (optional)
     const columnWidths = [
-        { wch: 5 }, // ID
-        { wch: 25 }, // Nombre del Caso
-        { wch: 25 }, // Cliente
-        { wch: 15 }, // Estado Actual
-        { wch: 20 }  // Fecha de Creación
+        { wch: 5 }, 
+        { wch: 25 }, 
+        { wch: 25 }, 
+        { wch: 15 }, 
+        { wch: 20 }  
     ];
     worksheet["!cols"] = columnWidths;
 
-    XLSX.writeFile(workbook, "reporte_casos_consorciomanager.xlsx");
+    XLSX.writeFile(workbook, "reporte_casos_prometeo.xlsx");
     toast({
       title: "Reporte Excel Generado",
       description: "El archivo Excel se ha descargado.",

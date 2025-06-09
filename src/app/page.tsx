@@ -24,7 +24,7 @@ export default function HomePage() {
       <Skeleton className="h-12 w-12 rounded-full bg-primary/20 mb-4" />
       <Skeleton className="h-4 w-[250px] bg-primary/20 mb-2" />
       <Skeleton className="h-4 w-[200px] bg-primary/20" />
-      <p className="mt-4 text-sm text-muted-foreground">Cargando ConsorcioManager...</p>
+      <p className="mt-4 text-sm text-muted-foreground">Cargando Prometeo...</p>
     </div>
   );
 }

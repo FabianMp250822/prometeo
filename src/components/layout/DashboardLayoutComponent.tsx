@@ -30,7 +30,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { 
   LayoutDashboard, FileText, FilePieChart, User, LogOut, Loader2, Menu,
-  CreditCard, Gavel, BookText, MessageSquareText // New icons
+  CreditCard, Gavel, BookText, MessageSquareText
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
@@ -41,7 +41,6 @@ interface NavItem {
   roles?: string[]; 
 }
 
-// Updated for vertical sidebar - this list is also used for the header title
 const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/consulta-pagos', label: 'Consulta Pagos', icon: CreditCard },
@@ -53,7 +52,6 @@ const navItems: NavItem[] = [
   { href: '/dashboard/profile', label: 'Mi Perfil', icon: User },
 ];
 
-// For the new horizontal menu
 const horizontalNavItems: NavItem[] = [
   { href: '/dashboard/consulta-pagos', label: 'Consulta de Pagos', icon: CreditCard },
   { href: '/dashboard/consulta-sentencias', label: 'Consulta Sentencias', icon: Gavel },
@@ -77,7 +75,7 @@ export default function DashboardLayoutComponent({ children }: { children: React
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="ml-4 text-xl text-primary font-semibold">Cargando ConsorcioManager...</p>
+        <p className="ml-4 text-xl text-primary font-semibold">Cargando Prometeo...</p>
       </div>
     );
   }
@@ -101,6 +99,7 @@ export default function DashboardLayoutComponent({ children }: { children: React
   };
   
   const pageTitle = navItems.find(item => pathname.startsWith(item.href))?.label || 'Dashboard';
+  const logoUrl = "https://firebasestorage.googleapis.com/v0/b/pensionados-d82b2.appspot.com/o/logos%2Fnegativo.svg?alt=media&token=b3ffeec6-5a49-4f72-b779-72b9643cfa5a";
 
   const MobileSidebar = () => (
     <Sheet>
@@ -114,26 +113,23 @@ export default function DashboardLayoutComponent({ children }: { children: React
         <SidebarHeader className="p-4 border-b border-sidebar-border">
           <Link href="/dashboard" className="flex items-center gap-2">
             <Image
-              src="https://placehold.co/40x40.png?text=CM"
-              alt="ConsorcioManager Logo"
-              width={40}
-              height={40}
-              className="rounded"
-              data-ai-hint="logo abstract"
+              src={logoUrl}
+              alt="Prometeo Logo"
+              width={32}
+              height={32}
             />
-            <h1 className="text-xl font-headline font-semibold text-sidebar-primary-foreground">ConsorcioManager</h1>
+            <h1 className="text-xl font-headline font-semibold text-sidebar-primary-foreground">Prometeo</h1>
           </Link>
         </SidebarHeader>
         <SidebarContent className="flex-1 overflow-y-auto p-4">
           <SidebarMenu>
             {navItems.map((item) => (
               <SidebarMenuItem key={item.href}>
-                <Link href={item.href} legacyBehavior={false}>
+                <Link href={item.href}>
                   <SidebarMenuButton
                     className="w-full justify-start text-base"
                     isActive={pathname === item.href}
                     variant={pathname === item.href ? "default" : "ghost"}
-                    asChild={false}
                   >
                     <item.icon className="mr-3 h-5 w-5" />
                     {item.label}
@@ -164,15 +160,13 @@ export default function DashboardLayoutComponent({ children }: { children: React
           <SidebarHeader className="p-4 border-b border-sidebar-border">
              <Link href="/dashboard" className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
                 <Image
-                  src="https://placehold.co/40x40.png?text=CM"
-                  alt="ConsorcioManager Logo"
-                  width={40}
-                  height={40}
-                  className="rounded"
-                  data-ai-hint="logo abstract"
+                  src={logoUrl}
+                  alt="Prometeo Logo"
+                  width={32}
+                  height={32}
                 />
                 <h1 className="text-xl font-headline font-semibold text-sidebar-primary-foreground group-data-[collapsible=icon]:hidden">
-                  ConsorcioManager
+                  Prometeo
                 </h1>
               </Link>
           </SidebarHeader>
@@ -180,12 +174,11 @@ export default function DashboardLayoutComponent({ children }: { children: React
             <SidebarMenu>
               {navItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
-                  <Link href={item.href} legacyBehavior={false}>
+                  <Link href={item.href}>
                     <SidebarMenuButton
                       className="w-full justify-start"
                       isActive={pathname === item.href}
                       tooltip={{children: item.label, side: 'right', className: 'bg-primary text-primary-foreground'}}
-                      asChild={false}
                     >
                       <item.icon className="mr-3 group-data-[collapsible=icon]:mr-0 h-5 w-5" />
                       <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
@@ -198,7 +191,6 @@ export default function DashboardLayoutComponent({ children }: { children: React
           <SidebarFooter className="p-2 border-t border-sidebar-border">
             <SidebarMenuButton onClick={logout} className="w-full justify-start" 
               tooltip={{children: "Cerrar Sesión", side: 'right', className: 'bg-primary text-primary-foreground'}}
-              asChild={false}
             >
               <LogOut className="mr-3 group-data-[collapsible=icon]:mr-0 h-5 w-5" />
               <span className="group-data-[collapsible=icon]:hidden">Cerrar Sesión</span>
@@ -224,7 +216,7 @@ export default function DashboardLayoutComponent({ children }: { children: React
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                   <Avatar className="h-9 w-9">
-                    <AvatarImage src={userProfile?.uid ? `https://avatar.vercel.sh/${userProfile.uid}.png` : undefined} alt={userProfile?.displayName || 'Usuario'} data-ai-hint="user avatar"/>
+                    <AvatarImage src={userProfile?.uid ? `https://avatar.vercel.sh/${userProfile.uid}.png` : undefined} alt={userProfile?.displayName || 'Usuario'} />
                     <AvatarFallback className="bg-primary text-primary-foreground">
                       {getInitials(userProfile?.displayName)}
                     </AvatarFallback>
@@ -259,14 +251,12 @@ export default function DashboardLayoutComponent({ children }: { children: React
             </DropdownMenu>
           </header>
 
-          {/* New Horizontal Menu */}
           <nav className="sticky top-16 z-9 hidden md:flex h-14 items-center justify-center gap-2 border-b bg-card px-4 sm:px-6 shadow-sm">
             {horizontalNavItems.map((item) => (
-              <Link key={item.href} href={item.href} legacyBehavior={false}>
+              <Link key={item.href} href={item.href}>
                 <Button
                   variant={pathname.startsWith(item.href) ? 'secondary' : 'ghost'}
                   className="font-medium text-sm px-3 py-2"
-                  asChild={false}
                 >
                   <item.icon className="mr-2 h-4 w-4" />
                   {item.label}

@@ -29,7 +29,7 @@ export default function WelcomeMessage() {
     <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
       <CardHeader className="flex flex-row items-center space-x-4 pb-4">
         <Avatar className="h-16 w-16 border-2 border-primary">
-          <AvatarImage src={userProfile?.uid ? `https://avatar.vercel.sh/${userProfile.uid}.png?size=128` : undefined} alt={userProfile?.displayName || 'Usuario'} data-ai-hint="user avatar"/>
+          <AvatarImage src={userProfile?.uid ? `https://avatar.vercel.sh/${userProfile.uid}.png?size=128` : undefined} alt={userProfile?.displayName || 'Usuario'} />
           <AvatarFallback className="text-2xl bg-primary/20 text-primary font-semibold">
             {getInitials(userProfile?.displayName)}
           </AvatarFallback>
@@ -39,7 +39,7 @@ export default function WelcomeMessage() {
             {getGreeting()}, {userProfile?.displayName || 'Usuario'}!
           </CardTitle>
           <CardDescription className="text-md text-muted-foreground">
-            Bienvenido de nuevo a ConsorcioManager.
+            Bienvenido de nuevo a Prometeo.
           </CardDescription>
         </div>
       </CardHeader>
@@ -52,7 +52,7 @@ export default function WelcomeMessage() {
           </Badge>
         </div>
         <p className="mt-3 text-sm text-muted-foreground">
-          Desde aquí puedes acceder a todas las herramientas y funcionalidades para gestionar el consorcio.
+          Desde aquí puedes acceder a todas las herramientas y funcionalidades para gestionar el sistema.
         </p>
       </CardContent>
     </Card>
