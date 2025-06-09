@@ -37,7 +37,6 @@ export default function ProfilePage() {
       setPhone(userProfile.phone || '');
       if (userProfile.birthDate) {
         try {
-          // Ensure userProfile.birthDate is a string before parsing
           const dateString = typeof userProfile.birthDate === 'string' ? userProfile.birthDate : String(userProfile.birthDate);
           const parsedDate = parseISO(dateString);
           if (isValid(parsedDate)) {
@@ -66,12 +65,14 @@ export default function ProfilePage() {
 
   const getInitials = (name?: string | null) => {
     if (!name || name.trim() === '') return 'U';
-    const names = name.trim().split(' ');
-    if (names.length > 1 && names[0] && names[names.length - 1]) {
+    const trimmedName = name.trim();
+    const names = trimmedName.split(' ').filter(n => n); 
+
+    if (names.length > 1) { 
       return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
     }
-    if (name.length > 0) {
-     return name.substring(0, Math.min(2, name.length)).toUpperCase();
+    if (names.length === 1 && names[0].length > 0) { 
+      return names[0].substring(0, Math.min(names[0].length, 2)).toUpperCase();
     }
     return 'U';
   };
@@ -125,13 +126,13 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="space-y-8 max-w-4xl mx-auto"> {/* Changed max-w-2xl to max-w-4xl */}
+    <div className="space-y-8 max-w-4xl mx-auto">
       <Card className="shadow-lg">
         <CardHeader className="text-center">
           <Avatar className="mx-auto h-24 w-24 mb-4 border-4 border-primary shadow-md">
             <AvatarImage src={currentUser.uid ? `https://avatar.vercel.sh/${currentUser.uid}.png?size=128` : undefined} alt={userProfile.displayName || 'Usuario'} data-ai-hint="user portrait" />
             <AvatarFallback className="text-3xl bg-primary/20 text-primary font-semibold">
-              {getInitials(userProfile.displayName)}
+              {getInitials(displayName || userProfile.displayName)}
             </AvatarFallback>
           </Avatar>
           <CardTitle className="text-3xl font-headline text-primary">
@@ -139,119 +140,112 @@ export default function ProfilePage() {
               <Input 
                 value={displayName} 
                 onChange={(e) => setDisplayName(e.target.value)}
-                className="text-3xl font-headline text-primary text-center"
+                className="text-3xl font-headline text-primary md:text-left w-full"
                 placeholder="Nombre Completo"
               />
             ) : (
-              userProfile.displayName || "Nombre no disponible"
+              displayName || userProfile.displayName || "Nombre no disponible"
             )}
           </CardTitle>
           <CardDescription className="text-lg text-muted-foreground">
             Gestiona la información de tu perfil.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-md">
-            <Mail className="h-5 w-5 text-primary" />
-            <div>
-              <Label htmlFor="email" className="text-xs text-muted-foreground">Email</Label>
-              <p id="email" className="text-md font-medium">{userProfile.email || "Email no disponible"}</p>
+        <CardContent className="space-y-6 pt-6">
+          <div className="grid md:grid-cols-2 md:gap-x-8 md:gap-y-6 space-y-6 md:space-y-0">
+            {/* Email field */}
+            <div className="flex items-start space-x-3 p-3 bg-muted/50 rounded-md md:col-span-1">
+              <Mail className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
+              <div>
+                <Label htmlFor="email" className="text-xs text-muted-foreground">Email</Label>
+                <p id="email" className="text-md font-medium break-words">{userProfile.email || "Email no disponible"}</p>
+              </div>
             </div>
-          </div>
-          
-          {isEditing && !userProfile.displayName && ( // Only show if editing AND displayName is initially empty/null
-            <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-md">
-                <UserCircle className="h-5 w-5 text-primary" />
-                <div>
-                <Label htmlFor="displayNameEdit" className="text-xs text-muted-foreground">Nombre para Mostrar</Label>
-                <Input 
-                    id="displayNameEdit"
-                    value={displayName} 
-                    onChange={(e) => setDisplayName(e.target.value)} 
+            
+            {/* Role field */}
+            <div className="flex items-start space-x-3 p-3 bg-muted/50 rounded-md md:col-span-1">
+              <Shield className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
+              <div>
+                <Label htmlFor="role" className="text-xs text-muted-foreground">Rol</Label>
+                <Badge id="role" variant="secondary" className="capitalize text-md bg-accent text-accent-foreground">{userProfile.role}</Badge>
+              </div>
+            </div>
+
+            {/* Address field */}
+            <div className="flex items-start space-x-3 p-3 bg-muted/50 rounded-md md:col-span-2">
+              <Home className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
+              <div className="w-full">
+                <Label htmlFor="addressLabel" className="text-xs text-muted-foreground">Dirección</Label>
+                {isEditing ? (
+                  <Input 
+                    id="addressEdit"
+                    value={address} 
+                    onChange={(e) => setAddress(e.target.value)} 
+                    placeholder="Ej: Calle Falsa 123, Ciudad"
                     className="text-md font-medium"
-                    placeholder="Tu nombre para mostrar"
-                />
-                </div>
+                  />
+                ) : (
+                  <p id="addressLabel" className="text-md font-medium break-words">{address || userProfile.address || "No especificada"}</p>
+                )}
+              </div>
             </div>
-          )}
 
-          <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-md">
-            <Home className="h-5 w-5 text-primary" />
-            <div className="w-full">
-              <Label htmlFor="addressLabel" className="text-xs text-muted-foreground">Dirección</Label>
-              {isEditing ? (
-                <Input 
-                  id="addressEdit"
-                  value={address} 
-                  onChange={(e) => setAddress(e.target.value)} 
-                  placeholder="Ej: Calle Falsa 123, Ciudad"
-                  className="text-md font-medium"
-                />
-              ) : (
-                <p id="addressLabel" className="text-md font-medium">{userProfile.address || "No especificada"}</p>
-              )}
+            {/* Phone field */}
+            <div className="flex items-start space-x-3 p-3 bg-muted/50 rounded-md md:col-span-1">
+              <Phone className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
+              <div className="w-full">
+                <Label htmlFor="phoneLabel" className="text-xs text-muted-foreground">Teléfono</Label>
+                {isEditing ? (
+                  <Input 
+                    id="phoneEdit"
+                    type="tel"
+                    value={phone} 
+                    onChange={(e) => setPhone(e.target.value)} 
+                    placeholder="Ej: +1 555 123456"
+                    className="text-md font-medium"
+                  />
+                ) : (
+                  <p id="phoneLabel" className="text-md font-medium break-words">{phone || userProfile.phone || "No especificado"}</p>
+                )}
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-md">
-            <Phone className="h-5 w-5 text-primary" />
-            <div className="w-full">
-              <Label htmlFor="phoneLabel" className="text-xs text-muted-foreground">Teléfono</Label>
-              {isEditing ? (
-                <Input 
-                  id="phoneEdit"
-                  type="tel"
-                  value={phone} 
-                  onChange={(e) => setPhone(e.target.value)} 
-                  placeholder="Ej: +1 555 123456"
-                  className="text-md font-medium"
-                />
-              ) : (
-                <p id="phoneLabel" className="text-md font-medium">{userProfile.phone || "No especificado"}</p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-md">
-            <CalendarIcon className="h-5 w-5 text-primary" />
-            <div className="w-full">
-              <Label htmlFor="birthDateLabel" className="text-xs text-muted-foreground">Fecha de Nacimiento</Label>
-              {isEditing ? (
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant={"outline"}
-                      className="w-full justify-start text-left font-normal text-md"
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {birthDate ? format(birthDate, "PPP", { useAdditionalWeekYearTokens: false, useAdditionalDayOfYearTokens: false }) : <span>Selecciona una fecha</span>}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                    <Calendar
-                      mode="single"
-                      selected={birthDate}
-                      onSelect={setBirthDate}
-                      initialFocus
-                      captionLayout="dropdown-buttons"
-                      fromYear={1900}
-                      toYear={new Date().getFullYear()}
-                    />
-                  </PopoverContent>
-                </Popover>
-              ) : (
-                <p id="birthDateLabel" className="text-md font-medium">
-                  {userProfile.birthDate && isValid(parseISO(typeof userProfile.birthDate === 'string' ? userProfile.birthDate : String(userProfile.birthDate))) ? format(parseISO(typeof userProfile.birthDate === 'string' ? userProfile.birthDate : String(userProfile.birthDate)), "PPP", { useAdditionalWeekYearTokens: false, useAdditionalDayOfYearTokens: false }) : "No especificada"}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-md">
-            <Shield className="h-5 w-5 text-primary" />
-            <div>
-              <Label htmlFor="role" className="text-xs text-muted-foreground">Rol</Label>
-              <Badge id="role" variant="secondary" className="capitalize text-md bg-accent text-accent-foreground">{userProfile.role}</Badge>
+            {/* BirthDate field */}
+            <div className="flex items-start space-x-3 p-3 bg-muted/50 rounded-md md:col-span-1">
+              <CalendarIcon className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
+              <div className="w-full">
+                <Label htmlFor="birthDateLabel" className="text-xs text-muted-foreground">Fecha de Nacimiento</Label>
+                {isEditing ? (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={"outline"}
+                        className="w-full justify-start text-left font-normal text-md"
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {birthDate ? format(birthDate, "PPP", { useAdditionalWeekYearTokens: false, useAdditionalDayOfYearTokens: false }) : <span>Selecciona una fecha</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        selected={birthDate}
+                        onSelect={setBirthDate}
+                        initialFocus
+                        captionLayout="dropdown-buttons"
+                        fromYear={1900}
+                        toYear={new Date().getFullYear()}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                ) : (
+                  <p id="birthDateLabel" className="text-md font-medium">
+                    {userProfile.birthDate && isValid(parseISO(typeof userProfile.birthDate === 'string' ? userProfile.birthDate : String(userProfile.birthDate))) 
+                      ? format(parseISO(typeof userProfile.birthDate === 'string' ? userProfile.birthDate : String(userProfile.birthDate)), "PPP", { useAdditionalWeekYearTokens: false, useAdditionalDayOfYearTokens: false }) 
+                      : "No especificada"}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
           
@@ -279,3 +273,4 @@ export default function ProfilePage() {
     </div>
   );
 }
+
