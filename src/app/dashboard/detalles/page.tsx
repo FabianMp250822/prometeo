@@ -1,6 +1,6 @@
 
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { FileDollar } from 'lucide-react';
+import { File } from 'lucide-react'; // Changed from FileDollar
 
 export default function DetallesPage() {
   return (
@@ -8,7 +8,7 @@ export default function DetallesPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center text-2xl font-headline text-primary">
-            <FileDollar className="mr-3 h-7 w-7" />
+            <File className="mr-3 h-7 w-7" /> {/* Changed from FileDollar */}
             Detalles
           </CardTitle>
         </CardHeader>

@@ -30,7 +30,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { 
   LayoutDashboard, User, LogOut, Loader2, Menu,
-  TrendingUp, Banknote, FileDollar, Award, Percent, Search,
+  TrendingUp, Banknote, File, Award, Percent, Search, // Changed FileDollar to File here
   CreditCard, Gavel, BookText, MessageSquareText, FilePieChart // Keep these for horizontal menu
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -47,7 +47,7 @@ const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/liquidaciones', label: 'Liquidaciones', icon: TrendingUp },
   { href: '/dashboard/pagos', label: 'Pagos', icon: Banknote },
-  { href: '/dashboard/detalles', label: 'Detalles', icon: FileDollar },
+  { href: '/dashboard/detalles', label: 'Detalles', icon: File }, // And here
   { href: '/dashboard/certificado', label: 'Certificado', icon: Award },
   { href: '/dashboard/adquisitivo', label: 'Adquisitivo', icon: Percent },
   { href: '/dashboard/procesos', label: 'Procesos', icon: Search },
@@ -277,4 +277,3 @@ export default function DashboardLayoutComponent({ children }: { children: React
     </SidebarProvider>
   );
 }
-
