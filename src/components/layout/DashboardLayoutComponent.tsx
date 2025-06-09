@@ -29,8 +29,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { 
-  LayoutDashboard, FileText, FilePieChart, User, LogOut, Loader2, Menu,
-  CreditCard, Gavel, BookText, MessageSquareText
+  LayoutDashboard, User, LogOut, Loader2, Menu,
+  TrendingUp, Banknote, FileDollar, Award, Percent, Search,
+  CreditCard, Gavel, BookText, MessageSquareText, FilePieChart // Keep these for horizontal menu
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
@@ -41,17 +42,19 @@ interface NavItem {
   roles?: string[]; 
 }
 
+// Updated navItems for the vertical sidebar
 const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/dashboard/consulta-pagos', label: 'Consulta Pagos', icon: CreditCard },
-  { href: '/dashboard/consulta-sentencias', label: 'Consulta Sentencias', icon: Gavel },
-  { href: '/dashboard/contabilidad', label: 'Contabilidad', icon: BookText },
-  { href: '/dashboard/asistente-legal', label: 'Asistente Legal', icon: MessageSquareText },
-  { href: '/dashboard/summarize', label: 'Resumir Documento', icon: FileText },
-  { href: '/dashboard/reports', label: 'Reportes', icon: FilePieChart },
+  { href: '/dashboard/liquidaciones', label: 'Liquidaciones', icon: TrendingUp },
+  { href: '/dashboard/pagos', label: 'Pagos', icon: Banknote },
+  { href: '/dashboard/detalles', label: 'Detalles', icon: FileDollar },
+  { href: '/dashboard/certificado', label: 'Certificado', icon: Award },
+  { href: '/dashboard/adquisitivo', label: 'Adquisitivo', icon: Percent },
+  { href: '/dashboard/procesos', label: 'Procesos', icon: Search },
   { href: '/dashboard/profile', label: 'Mi Perfil', icon: User },
 ];
 
+// Horizontal menu items remain as previously defined
 const horizontalNavItems: NavItem[] = [
   { href: '/dashboard/consulta-pagos', label: 'Consulta de Pagos', icon: CreditCard },
   { href: '/dashboard/consulta-sentencias', label: 'Consulta Sentencias', icon: Gavel },
@@ -98,7 +101,8 @@ export default function DashboardLayoutComponent({ children }: { children: React
     return 'U';
   };
   
-  const pageTitle = navItems.find(item => pathname.startsWith(item.href))?.label || 'Dashboard';
+  const pageTitleItem = navItems.find(item => pathname === item.href) || horizontalNavItems.find(item => pathname === item.href);
+  const pageTitle = pageTitleItem?.label || 'Dashboard';
   const logoUrl = "https://firebasestorage.googleapis.com/v0/b/pensionados-d82b2.appspot.com/o/logos%2Fpositivo.svg?alt=media&token=5e520b2a-e786-4cfa-a861-447bfcfec826";
 
 
@@ -112,7 +116,7 @@ export default function DashboardLayoutComponent({ children }: { children: React
       </SheetTrigger>
       <SheetContent side="left" className="p-0 flex flex-col bg-sidebar text-sidebar-foreground w-[280px]">
         <SidebarHeader className="p-4 border-b border-sidebar-border">
-          <Link href="/dashboard" className="flex items-center justify-center h-16"> {/* Adjusted height */}
+          <Link href="/dashboard" className="flex items-center justify-center h-16">
             <Image
               src={logoUrl}
               alt="Prometeo Logo"
@@ -159,13 +163,13 @@ export default function DashboardLayoutComponent({ children }: { children: React
           className="hidden md:flex flex-col border-r border-sidebar-border shadow-lg"
         >
           <SidebarHeader className="p-4 border-b border-sidebar-border">
-             <Link href="/dashboard" className="flex items-center justify-center h-16 group-data-[collapsible=icon]:justify-center"> {/* Adjusted height */}
+             <Link href="/dashboard" className="flex items-center justify-center h-16 group-data-[collapsible=icon]:justify-center">
                 <Image
                   src={logoUrl}
                   alt="Prometeo Logo"
                   width={180} 
                   height={60}
-                  className="group-data-[collapsible=icon]:w-12 group-data-[collapsible=icon]:h-12" // Adjusted collapsed size
+                  className="group-data-[collapsible=icon]:w-12 group-data-[collapsible=icon]:h-12" 
                   priority
                 />
               </Link>
