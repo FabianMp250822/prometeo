@@ -37,21 +37,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     let unsubscribeProfile: Unsubscribe | undefined;
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      console.log("AuthContext: onAuthStateChanged triggered. User:", user?.uid || 'No user');
       setCurrentUser(user);
       if (user) {
-        setLoading(true); // Set loading true while fetching/listening to profile
+        setLoading(true); 
         const userDocRef = doc(db, "users", user.uid);
+        console.log(`AuthContext: Setting up snapshot listener for user ${user.uid} at path ${userDocRef.path}`);
 
-        // Unsubscribe from previous profile listener if it exists
         if (unsubscribeProfile) {
+          console.log("AuthContext: Unsubscribing from previous profile listener.");
           unsubscribeProfile();
         }
 
         unsubscribeProfile = onSnapshot(userDocRef, async (docSnap) => {
+          console.log(`AuthContext: Snapshot received for user ${user.uid}. Document exists: ${docSnap.exists()}`);
           if (docSnap.exists()) {
-            setUserProfile(docSnap.data() as UserProfile);
+            const profileData = docSnap.data() as UserProfile;
+            console.log("AuthContext: Profile data from Firestore:", JSON.stringify(profileData));
+            setUserProfile(profileData);
+            setLoading(false);
           } else {
-            // If profile doesn't exist, create a basic one
+            console.warn(`AuthContext: User profile for ${user.uid} NOT FOUND in Firestore. Will attempt to create a default 'Pensionado' profile.`);
             const defaultProfile: UserProfile = {
               uid: user.uid,
               email: user.email,
@@ -60,22 +66,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             };
             try {
               await setDoc(userDocRef, defaultProfile);
-              // setUserProfile(defaultProfile); // The listener will pick this up
-              console.warn(`User profile for ${user.uid} not found. Created a default one.`);
+              console.log(`AuthContext: Default 'Pensionado' profile CREATED for ${user.uid}. The listener should pick this up.`);
+              // setLoading(false); // Let the next snapshot (after setDoc) handle setLoading
             } catch (error) {
-              console.error("Error creating default user profile:", error);
+              console.error("AuthContext: Error CREATING default user profile:", error);
+              setUserProfile(null); 
+              setLoading(false); 
             }
           }
-          setLoading(false);
         }, (error) => {
-          console.error("Error listening to user profile:", error);
+          console.error(`AuthContext: Error listening to user profile for ${user.uid}:`, error);
           setUserProfile(null);
           setLoading(false);
         });
 
       } else {
         // User is logged out
+        console.log("AuthContext: User is logged out.");
         if (unsubscribeProfile) {
+          console.log("AuthContext: Unsubscribing from profile listener on logout.");
           unsubscribeProfile();
           unsubscribeProfile = undefined;
         }
@@ -85,6 +94,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
 
     return () => {
+      console.log("AuthContext: Cleaning up AuthProvider. Unsubscribing auth and profile listeners.");
       unsubscribeAuth();
       if (unsubscribeProfile) {
         unsubscribeProfile();
@@ -93,16 +103,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const logout = async () => {
+    console.log("AuthContext: logout function called.");
     try {
       await firebaseSignOut(auth);
       // State updates (currentUser, userProfile) will be handled by onAuthStateChanged
       router.push('/login');
     } catch (error) {
-      console.error("Error signing out: ", error);
+      console.error("AuthContext: Error signing out: ", error);
     }
   };
   
   const isAdmin = userProfile?.role === ROLES.ADMINISTRADOR;
+  if (userProfile) {
+    console.log(`AuthContext: isAdmin check: userProfile.role is "${userProfile.role}", ROLES.ADMINISTRADOR is "${ROLES.ADMINISTRADOR}". isAdmin: ${isAdmin}`);
+  }
+
 
   return (
     <AuthContext.Provider value={{ currentUser, userProfile, loading, isAdmin, logout }}>
@@ -110,15 +125,3 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     </AuthContext.Provider>
   );
 };
-
-// This useAuth hook is defined within AuthContext.tsx but the app primarily uses the one from /hooks/useAuth.ts
-// To avoid confusion, ensure that the intended hook is consistently used or refactor to have a single source.
-// For now, the error is addressed by exporting AuthContext above.
-// export const useAuth = (): AuthContextType => {
-//   const context = useContext(AuthContext);
-//   if (context === undefined) {
-//     throw new Error('useAuth must be used within an AuthProvider');
-//   }
-//   return context;
-// };
-
