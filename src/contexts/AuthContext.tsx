@@ -1,10 +1,10 @@
 
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useEffect, useState, ReactNode } from 'react';
 import { User as FirebaseUser, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import type { UserRole } from '@/config/roles';
 import { ROLES } from '@/config/roles';
 import { useRouter } from 'next/navigation';
@@ -23,7 +23,6 @@ interface AuthContextType {
   loading: boolean;
   isAdmin: boolean;
   logout: () => Promise<void>;
-  // Add signIn function if LoginForm is managed by this context
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -35,46 +34,71 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const router = useRouter();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let unsubscribeProfile: Unsubscribe | undefined;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {
-        // Fetch user profile from Firestore
+        setLoading(true); // Set loading true while fetching/listening to profile
         const userDocRef = doc(db, "users", user.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          setUserProfile(userDocSnap.data() as UserProfile);
-        } else {
-          // If profile doesn't exist, create a basic one (e.g., for new users)
-          // For now, assign a default role or handle as an error/incomplete setup
-          // This part would be more robust with a proper user creation flow
-          const defaultProfile: UserProfile = {
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName || user.email?.split('@')[0] || 'Usuario',
-            role: ROLES.PENSIONADO, // Default role, adjust as needed
-          };
-          await setDoc(userDocRef, defaultProfile);
-          setUserProfile(defaultProfile);
-          console.warn(`User profile for ${user.uid} not found in Firestore. Created a default one.`);
+
+        // Unsubscribe from previous profile listener if it exists
+        if (unsubscribeProfile) {
+          unsubscribeProfile();
         }
+
+        unsubscribeProfile = onSnapshot(userDocRef, async (docSnap) => {
+          if (docSnap.exists()) {
+            setUserProfile(docSnap.data() as UserProfile);
+          } else {
+            // If profile doesn't exist, create a basic one
+            const defaultProfile: UserProfile = {
+              uid: user.uid,
+              email: user.email,
+              displayName: user.displayName || user.email?.split('@')[0] || 'Usuario',
+              role: ROLES.PENSIONADO, // Default role
+            };
+            try {
+              await setDoc(userDocRef, defaultProfile);
+              // setUserProfile(defaultProfile); // The listener will pick this up
+              console.warn(`User profile for ${user.uid} not found. Created a default one.`);
+            } catch (error) {
+              console.error("Error creating default user profile:", error);
+            }
+          }
+          setLoading(false);
+        }, (error) => {
+          console.error("Error listening to user profile:", error);
+          setUserProfile(null);
+          setLoading(false);
+        });
+
       } else {
+        // User is logged out
+        if (unsubscribeProfile) {
+          unsubscribeProfile();
+          unsubscribeProfile = undefined;
+        }
         setUserProfile(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+      }
+    };
   }, []);
 
   const logout = async () => {
     try {
       await firebaseSignOut(auth);
-      setCurrentUser(null);
-      setUserProfile(null);
+      // State updates (currentUser, userProfile) will be handled by onAuthStateChanged
       router.push('/login');
     } catch (error) {
       console.error("Error signing out: ", error);
-      // Handle error (e.g., show toast)
     }
   };
   
@@ -90,10 +114,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 // This useAuth hook is defined within AuthContext.tsx but the app primarily uses the one from /hooks/useAuth.ts
 // To avoid confusion, ensure that the intended hook is consistently used or refactor to have a single source.
 // For now, the error is addressed by exporting AuthContext above.
-export const useAuth = (): AuthContextType => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+// export const useAuth = (): AuthContextType => {
+//   const context = useContext(AuthContext);
+//   if (context === undefined) {
+//     throw new Error('useAuth must be used within an AuthProvider');
+//   }
+//   return context;
+// };
+
