@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
@@ -25,7 +26,7 @@ interface AuthContextType {
   // Add signIn function if LoginForm is managed by this context
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
@@ -86,6 +87,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
+// This useAuth hook is defined within AuthContext.tsx but the app primarily uses the one from /hooks/useAuth.ts
+// To avoid confusion, ensure that the intended hook is consistently used or refactor to have a single source.
+// For now, the error is addressed by exporting AuthContext above.
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (context === undefined) {
