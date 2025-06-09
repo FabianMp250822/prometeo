@@ -1,3 +1,4 @@
+
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, connectAuthEmulator, Auth } from 'firebase/auth';
 import { getFirestore, initializeFirestore, connectFirestoreEmulator, Firestore } from 'firebase/firestore';
@@ -20,62 +21,58 @@ let db: Firestore;
 let storage: FirebaseStorage;
 let appCheck: AppCheck | undefined = undefined;
 
+const DATABASE_ID = 'prometeo'; // Definir el ID de la base de datos
 
-if (typeof window !== 'undefined' && !getApps().length) {
+// Asegurar que la app esté inicializada
+if (!getApps().length) {
+  console.log("Firebase: Initializing new Firebase app.");
   app = initializeApp(firebaseConfig);
-  auth = getAuth(app);
-  // Initialize Firestore with the specific database ID "prometeo"
-  db = initializeFirestore(app, { databaseId: 'prometeo' });
-  storage = getStorage(app);
-
-  if (process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
-     try {
-        // Attempt to get AppCheck instance if it's already initialized.
-        // This is a bit of a workaround as Firebase SDK doesn't have a direct `getAppCheckInstanceIfExists`.
-        // If it throws, it means it's not initialized.
-        // This check is mainly to prevent re-initialization errors during HMR in development.
-        // const existingAppCheck = (app as any)._components.get('app-check')?.instance;
-        // if (!existingAppCheck) {
-           appCheck = initializeAppCheck(app, {
-            provider: new ReCaptchaV3Provider(process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY),
-            isTokenAutoRefreshEnabled: true,
-          });
-        // } else {
-        //    appCheck = existingAppCheck;
-        // }
-      } catch (error) {
-        console.error("Error initializing App Check:", error);
-      }
-  } else {
-    console.warn("NEXT_PUBLIC_RECAPTCHA_SITE_KEY is not set. Firebase App Check will not be initialized.");
-  }
-  
-
-  // Optional: Connect to emulators in development
-  if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
-    connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
-    connectFirestoreEmulator(db, 'localhost', 8080);
-    connectStorageEmulator(storage, 'localhost', 9199);
-    console.log("Connected to Firebase Emulators");
-  }
-} else if (getApps().length > 0) {
-  app = getApp();
-  auth = getAuth(app);
-  try {
-    db = getFirestore(app, 'prometeo');
-  } catch(e) {
-    db = initializeFirestore(app, { databaseId: 'prometeo' });
-  }
-  storage = getStorage(app);
-  // App Check should already be initialized if window was previously defined
 } else {
-  // Fallback for server-side rendering or environments where window is not defined initially
-  // This setup might be partial as AppCheck with ReCaptchaV3 is client-side.
-  app = initializeApp(firebaseConfig); // Initialize for server contexts if needed
-  auth = getAuth(app);
-  db = initializeFirestore(app, { databaseId: 'prometeo' });
-  storage = getStorage(app);
+  console.log("Firebase: Getting existing Firebase app.");
+  app = getApp();
 }
 
+// Inicializar servicios
+auth = getAuth(app);
+storage = getStorage(app);
+
+// Inicializar o obtener explícitamente Firestore para 'prometeo'
+try {
+  console.log(`Firebase: Attempting to get Firestore instance for database ID: ${DATABASE_ID}`);
+  db = getFirestore(app, DATABASE_ID);
+  console.log(`Firebase: Successfully got Firestore instance for database ID: ${DATABASE_ID}. Path: ${db.toJSON()?.settings?.databaseId || 'N/A'}`);
+} catch (e: any) {
+  console.warn(`Firebase: getFirestore for ${DATABASE_ID} failed (error: ${e.message || String(e)}). Initializing new instance for ${DATABASE_ID}.`);
+  db = initializeFirestore(app, { databaseId: DATABASE_ID });
+  console.log(`Firebase: Successfully initialized new Firestore instance for database ID: ${DATABASE_ID}. Path: ${db.toJSON()?.settings?.databaseId || 'N/A'}`);
+}
+
+
+// Operaciones del lado del cliente (AppCheck, Emuladores)
+if (typeof window !== 'undefined') {
+  if (process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY) {
+     try {
+        console.log("Firebase: Initializing App Check.");
+        appCheck = initializeAppCheck(app, {
+          provider: new ReCaptchaV3Provider(process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY),
+          isTokenAutoRefreshEnabled: true,
+        });
+        console.log("Firebase: App Check initialized.");
+      } catch (error) {
+        console.error("Firebase: Error initializing App Check:", error);
+      }
+  } else {
+    console.warn("Firebase: NEXT_PUBLIC_RECAPTCHA_SITE_KEY is not set. Firebase App Check will not be initialized.");
+  }
+  
+  if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
+    console.log("Firebase: Connecting to emulators.");
+    connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
+    console.log(`Firebase: Connecting Firestore instance (intended for ${DATABASE_ID}, actual instance databaseId: ${db.toJSON()?.settings?.databaseId || 'N/A'}) to emulator.`);
+    connectFirestoreEmulator(db, 'localhost', 8080);
+    connectStorageEmulator(storage, 'localhost', 9199);
+    console.log("Firebase: Connected to Firebase Emulators.");
+  }
+}
 
 export { app, auth, db, storage, appCheck };
