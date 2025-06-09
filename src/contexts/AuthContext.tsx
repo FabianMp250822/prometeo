@@ -27,6 +27,8 @@ interface AuthContextType {
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const USERS_COLLECTION = "prometeo_users";
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -35,13 +37,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     let unsubscribeProfile: Unsubscribe | undefined;
+    console.log(`AuthContext: Using Firestore instance with databaseId: ${db.toJSON()?.settings?.databaseId || '(default)'}. User collection: "${USERS_COLLECTION}"`);
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       console.log("AuthContext: onAuthStateChanged triggered. User:", user?.uid || 'No user');
       setCurrentUser(user);
       if (user) {
         setLoading(true); 
-        const userDocRef = doc(db, "users", user.uid);
+        const userDocRef = doc(db, USERS_COLLECTION, user.uid);
         console.log(`AuthContext: Setting up snapshot listener for user ${user.uid} at path ${userDocRef.path}`);
 
         if (unsubscribeProfile) {
@@ -50,14 +53,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
 
         unsubscribeProfile = onSnapshot(userDocRef, async (docSnap) => {
-          console.log(`AuthContext: Snapshot received for user ${user.uid}. Document exists: ${docSnap.exists()}`);
+          console.log(`AuthContext: Snapshot received for user ${user.uid}. Document exists: ${docSnap.exists()} in collection "${USERS_COLLECTION}"`);
           if (docSnap.exists()) {
             const profileData = docSnap.data() as UserProfile;
-            console.log("AuthContext: Profile data from Firestore:", JSON.stringify(profileData));
+            console.log(`AuthContext: Profile data from Firestore (collection "${USERS_COLLECTION}"):`, JSON.stringify(profileData));
             setUserProfile(profileData);
             setLoading(false);
           } else {
-            console.warn(`AuthContext: User profile for ${user.uid} NOT FOUND in Firestore. Will attempt to create a default 'Pensionado' profile.`);
+            console.warn(`AuthContext: User profile for ${user.uid} NOT FOUND in Firestore collection "${USERS_COLLECTION}". Will attempt to create a default 'Pensionado' profile.`);
             const defaultProfile: UserProfile = {
               uid: user.uid,
               email: user.email,
@@ -66,16 +69,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             };
             try {
               await setDoc(userDocRef, defaultProfile);
-              console.log(`AuthContext: Default 'Pensionado' profile CREATED for ${user.uid}. The listener should pick this up.`);
+              console.log(`AuthContext: Default 'Pensionado' profile CREATED for ${user.uid} in collection "${USERS_COLLECTION}". The listener should pick this up.`);
               // setLoading(false); // Let the next snapshot (after setDoc) handle setLoading
             } catch (error) {
-              console.error("AuthContext: Error CREATING default user profile:", error);
+              console.error(`AuthContext: Error CREATING default user profile in collection "${USERS_COLLECTION}":`, error);
               setUserProfile(null); 
               setLoading(false); 
             }
           }
         }, (error) => {
-          console.error(`AuthContext: Error listening to user profile for ${user.uid}:`, error);
+          console.error(`AuthContext: Error listening to user profile for ${user.uid} in collection "${USERS_COLLECTION}":`, error);
           setUserProfile(null);
           setLoading(false);
         });
@@ -125,3 +128,4 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     </AuthContext.Provider>
   );
 };
+

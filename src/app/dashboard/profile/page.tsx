@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useAuth } from '@/hooks/useAuth';
@@ -8,17 +9,25 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Mail, UserCircle, Shield, Edit3, Save } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase'; // Assuming db is exported from your firebase config
 
+const USERS_COLLECTION = "prometeo_users";
+
 export default function ProfilePage() {
   const { userProfile, currentUser, loading: authLoading } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
-  const [displayName, setDisplayName] = useState(userProfile?.displayName || '');
+  const [displayName, setDisplayName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (userProfile?.displayName) {
+      setDisplayName(userProfile.displayName);
+    }
+  }, [userProfile?.displayName]);
 
   if (authLoading) {
     return <div className="text-center p-10">Cargando perfil...</div>;
@@ -41,11 +50,9 @@ export default function ProfilePage() {
     if (!currentUser) return;
     setIsLoading(true);
     try {
-      const userDocRef = doc(db, "users", currentUser.uid);
+      const userDocRef = doc(db, USERS_COLLECTION, currentUser.uid);
       await updateDoc(userDocRef, { displayName });
-      // Note: AuthContext might need a refresh mechanism for userProfile
-      // For now, we manually update local state for immediate feedback
-      // This is a simplified update; ideally, AuthContext would refetch or update its state.
+      // Note: AuthContext's onSnapshot should automatically update userProfile.
       toast({ title: "Perfil actualizado", description: "Tu nombre ha sido guardado." });
       setIsEditing(false);
     } catch (error) {
@@ -137,3 +144,4 @@ export default function ProfilePage() {
     </div>
   );
 }
+

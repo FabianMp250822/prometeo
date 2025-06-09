@@ -21,8 +21,6 @@ let db: Firestore;
 let storage: FirebaseStorage;
 let appCheck: AppCheck | undefined = undefined;
 
-const DATABASE_ID = 'prometeo'; // Definir el ID de la base de datos
-
 // Asegurar que la app esté inicializada
 if (!getApps().length) {
   console.log("Firebase: Initializing new Firebase app.");
@@ -36,16 +34,10 @@ if (!getApps().length) {
 auth = getAuth(app);
 storage = getStorage(app);
 
-// Inicializar o obtener explícitamente Firestore para 'prometeo'
-try {
-  console.log(`Firebase: Attempting to get Firestore instance for database ID: ${DATABASE_ID}`);
-  db = getFirestore(app, DATABASE_ID);
-  console.log(`Firebase: Successfully got Firestore instance for database ID: ${DATABASE_ID}. Path: ${db.toJSON()?.settings?.databaseId || 'N/A'}`);
-} catch (e: any) {
-  console.warn(`Firebase: getFirestore for ${DATABASE_ID} failed (error: ${e.message || String(e)}). Initializing new instance for ${DATABASE_ID}.`);
-  db = initializeFirestore(app, { databaseId: DATABASE_ID });
-  console.log(`Firebase: Successfully initialized new Firestore instance for database ID: ${DATABASE_ID}. Path: ${db.toJSON()?.settings?.databaseId || 'N/A'}`);
-}
+// Inicializar Firestore para la instancia (default)
+console.log("Firebase: Initializing Firestore for (default) database.");
+db = getFirestore(app); // Esto obtiene la instancia (default)
+console.log(`Firebase: Firestore initialized for (default) database. Instance DB ID: ${db.toJSON()?.settings?.databaseId || '(default)'}`);
 
 
 // Operaciones del lado del cliente (AppCheck, Emuladores)
@@ -68,7 +60,7 @@ if (typeof window !== 'undefined') {
   if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
     console.log("Firebase: Connecting to emulators.");
     connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
-    console.log(`Firebase: Connecting Firestore instance (intended for ${DATABASE_ID}, actual instance databaseId: ${db.toJSON()?.settings?.databaseId || 'N/A'}) to emulator.`);
+    console.log(`Firebase: Connecting Firestore (default) instance to emulator. Instance DB ID: ${db.toJSON()?.settings?.databaseId || '(default)'}`);
     connectFirestoreEmulator(db, 'localhost', 8080);
     connectStorageEmulator(storage, 'localhost', 9199);
     console.log("Firebase: Connected to Firebase Emulators.");
@@ -76,3 +68,4 @@ if (typeof window !== 'undefined') {
 }
 
 export { app, auth, db, storage, appCheck };
+
