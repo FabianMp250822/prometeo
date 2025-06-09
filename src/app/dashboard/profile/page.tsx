@@ -10,12 +10,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Mail, UserCircle, Shield, Edit3, Save, Home, Phone, CalendarIcon } from 'lucide-react';
+import { Mail, UserCircle, Shield, Edit3, Save, Home, Phone, CalendarIcon, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 
 const USERS_COLLECTION = "prometeo_users";
 
@@ -37,7 +37,13 @@ export default function ProfilePage() {
       setPhone(userProfile.phone || '');
       if (userProfile.birthDate) {
         try {
-          setBirthDate(parseISO(userProfile.birthDate));
+          const parsedDate = parseISO(userProfile.birthDate);
+          if (isValid(parsedDate)) {
+            setBirthDate(parsedDate);
+          } else {
+            console.warn("Invalid birthDate from Firestore:", userProfile.birthDate);
+            setBirthDate(undefined);
+          }
         } catch (e) {
           console.error("Error parsing birthDate:", e);
           setBirthDate(undefined);
@@ -59,10 +65,13 @@ export default function ProfilePage() {
   const getInitials = (name?: string | null) => {
     if (!name) return 'U';
     const names = name.split(' ');
-    if (names.length > 1) {
+    if (names.length > 1 && names[0] && names[names.length - 1]) {
       return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
     }
-    return name.substring(0, 2).toUpperCase();
+    if (name.length > 0) {
+     return name.substring(0, Math.min(2, name.length)).toUpperCase();
+    }
+    return 'U';
   };
   
   const handleSave = async () => {
@@ -72,8 +81,8 @@ export default function ProfilePage() {
       const userDocRef = doc(db, USERS_COLLECTION, currentUser.uid);
       const updatedData: any = { 
         displayName,
-        address,
-        phone,
+        address: address || null,
+        phone: phone || null,
         birthDate: birthDate ? format(birthDate, 'yyyy-MM-dd') : null,
       };
       await updateDoc(userDocRef, updatedData);
@@ -87,20 +96,29 @@ export default function ProfilePage() {
     }
   };
 
-  const handleCancelEdit = () => {
-    setIsEditing(false);
+  const resetFormFields = () => {
     if (userProfile) {
       setDisplayName(userProfile.displayName || '');
       setAddress(userProfile.address || '');
       setPhone(userProfile.phone || '');
       if (userProfile.birthDate) {
          try {
-          setBirthDate(parseISO(userProfile.birthDate));
+          const parsedDate = parseISO(userProfile.birthDate);
+          if (isValid(parsedDate)) {
+            setBirthDate(parsedDate);
+          } else {
+            setBirthDate(undefined);
+          }
         } catch (e) { setBirthDate(undefined); }
       } else {
         setBirthDate(undefined);
       }
     }
+  }
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    resetFormFields();
   }
 
   return (
@@ -119,9 +137,10 @@ export default function ProfilePage() {
                 value={displayName} 
                 onChange={(e) => setDisplayName(e.target.value)}
                 className="text-3xl font-headline text-primary text-center"
+                placeholder="Nombre Completo"
               />
             ) : (
-              userProfile.displayName
+              userProfile.displayName || "Nombre no disponible"
             )}
           </CardTitle>
           <CardDescription className="text-lg">
@@ -133,26 +152,25 @@ export default function ProfilePage() {
             <Mail className="h-5 w-5 text-primary" />
             <div>
               <Label htmlFor="email" className="text-xs text-muted-foreground">Email</Label>
-              <p id="email" className="text-md font-medium">{userProfile.email}</p>
+              <p id="email" className="text-md font-medium">{userProfile.email || "Email no disponible"}</p>
             </div>
           </div>
           
-          <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-md">
-            <UserCircle className="h-5 w-5 text-primary" />
-            <div>
-              <Label htmlFor="displayNameLabel" className="text-xs text-muted-foreground">Nombre para Mostrar</Label>
-              {isEditing ? (
+          {isEditing && (
+            <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-md">
+                <UserCircle className="h-5 w-5 text-primary" />
+                <div>
+                <Label htmlFor="displayNameEdit" className="text-xs text-muted-foreground">Nombre para Mostrar</Label>
                 <Input 
-                  id="displayNameEdit"
-                  value={displayName} 
-                  onChange={(e) => setDisplayName(e.target.value)} 
-                  className="text-md font-medium"
+                    id="displayNameEdit"
+                    value={displayName} 
+                    onChange={(e) => setDisplayName(e.target.value)} 
+                    className="text-md font-medium"
+                    placeholder="Tu nombre para mostrar"
                 />
-              ) : (
-                <p id="displayNameLabel" className="text-md font-medium">{displayName || userProfile.displayName}</p>
-              )}
+                </div>
             </div>
-          </div>
+          )}
 
           <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-md">
             <Home className="h-5 w-5 text-primary" />
@@ -167,7 +185,7 @@ export default function ProfilePage() {
                   className="text-md font-medium"
                 />
               ) : (
-                <p id="addressLabel" className="text-md font-medium">{address || "No especificada"}</p>
+                <p id="addressLabel" className="text-md font-medium">{userProfile.address || "No especificada"}</p>
               )}
             </div>
           </div>
@@ -186,14 +204,14 @@ export default function ProfilePage() {
                   className="text-md font-medium"
                 />
               ) : (
-                <p id="phoneLabel" className="text-md font-medium">{phone || "No especificado"}</p>
+                <p id="phoneLabel" className="text-md font-medium">{userProfile.phone || "No especificado"}</p>
               )}
             </div>
           </div>
 
           <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-md">
             <CalendarIcon className="h-5 w-5 text-primary" />
-            <div>
+            <div className="w-full">
               <Label htmlFor="birthDateLabel" className="text-xs text-muted-foreground">Fecha de Nacimiento</Label>
               {isEditing ? (
                 <Popover>
@@ -203,7 +221,7 @@ export default function ProfilePage() {
                       className="w-full justify-start text-left font-normal text-md"
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
-                      {birthDate ? format(birthDate, "PPP") : <span>Selecciona una fecha</span>}
+                      {birthDate ? format(birthDate, "PPP", { useAdditionalWeekYearTokens: false, useAdditionalDayOfYearTokens: false }) : <span>Selecciona una fecha</span>}
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0">
@@ -219,11 +237,12 @@ export default function ProfilePage() {
                   </PopoverContent>
                 </Popover>
               ) : (
-                <p id="birthDateLabel" className="text-md font-medium">{birthDate ? format(birthDate, "PPP") : "No especificada"}</p>
+                <p id="birthDateLabel" className="text-md font-medium">
+                  {userProfile.birthDate && isValid(parseISO(userProfile.birthDate)) ? format(parseISO(userProfile.birthDate), "PPP", { useAdditionalWeekYearTokens: false, useAdditionalDayOfYearTokens: false }) : "No especificada"}
+                </p>
               )}
             </div>
           </div>
-
 
           <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-md">
             <Shield className="h-5 w-5 text-primary" />
@@ -236,7 +255,10 @@ export default function ProfilePage() {
           <div className="flex justify-end space-x-2 pt-4">
             {isEditing ? (
               <>
-                <Button variant="outline" onClick={handleCancelEdit}>Cancelar</Button>
+                <Button variant="outline" onClick={handleCancelEdit} disabled={isLoading}>
+                  <X className="mr-2 h-4 w-4" />
+                  Cancelar
+                </Button>
                 <Button onClick={handleSave} disabled={isLoading}>
                   {isLoading ? <Save className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                   Guardar

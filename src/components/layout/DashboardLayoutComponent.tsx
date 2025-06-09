@@ -35,7 +35,7 @@ interface NavItem {
   href: string;
   label: string;
   icon: React.ElementType;
-  roles?: string[]; // Define which roles can see this item
+  roles?: string[]; 
 }
 
 const navItems: NavItem[] = [
@@ -66,17 +66,19 @@ export default function DashboardLayoutComponent({ children }: { children: React
   }
 
   if (!currentUser) {
-     // This will be handled by the useEffect redirect, but as a fallback
     return null;
   }
   
   const getInitials = (name?: string | null) => {
     if (!name) return 'U';
     const names = name.split(' ');
-    if (names.length > 1) {
+    if (names.length > 1 && names[0] && names[names.length - 1]) {
       return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
     }
-    return name.substring(0, 2).toUpperCase();
+     if (name.length > 0) {
+     return name.substring(0, Math.min(2, name.length)).toUpperCase();
+    }
+    return 'U';
   };
 
   const MobileSidebar = () => (
@@ -184,15 +186,27 @@ export default function DashboardLayoutComponent({ children }: { children: React
           </SidebarFooter>
         </Sidebar>
 
+        {/* Main content area including the adaptive header */}
         <SidebarInset className="flex-1 flex flex-col bg-background">
+          {/* Adaptive Header:
+              - `sticky top-0 z-10`: Makes the header sticky at the top.
+              - `flex h-16 items-center justify-between`: Basic flex layout for header items.
+              - `px-4 sm:px-6`: Responsive padding.
+              - Left side of header: Contains logic for showing mobile (Menu icon) or desktop (SidebarTrigger icon) based on `md` breakpoint.
+              - Title: `text-lg md:text-xl` makes title font size responsive.
+              - Right side of header: User avatar and dropdown, generally adaptive by nature of dropdowns.
+          */}
           <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-card px-4 sm:px-6 shadow-sm">
             <div className="flex items-center gap-2">
+               {/* Mobile menu trigger: shown only on screens smaller than 'md' (tablets/mobile) */}
                <div className="md:hidden">
                 <MobileSidebar />
               </div>
+              {/* Desktop sidebar trigger: shown only on 'md' screens and larger (tablets/desktops) */}
               <div className="hidden md:block">
                 <SidebarTrigger />
               </div>
+              {/* Title: Text size adapts at 'md' breakpoint */}
               <h1 className="text-lg font-semibold text-foreground md:text-xl font-headline">
                 {navItems.find(item => pathname.startsWith(item.href))?.label || 'Dashboard'}
               </h1>
