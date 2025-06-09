@@ -4,7 +4,7 @@
 import React, { createContext, useEffect, useState, ReactNode } from 'react';
 import { User as FirebaseUser, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { doc, getDoc, setDoc, onSnapshot, Unsubscribe } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, Unsubscribe, Timestamp } from 'firebase/firestore';
 import type { UserRole } from '@/config/roles';
 import { ROLES } from '@/config/roles';
 import { useRouter } from 'next/navigation';
@@ -14,6 +14,9 @@ interface UserProfile {
   email: string | null;
   displayName: string | null;
   role: UserRole;
+  address: string | null;
+  phone: string | null;
+  birthDate: string | null; // Store as ISO string e.g., "YYYY-MM-DD" or null
   // Add other profile fields as needed
 }
 
@@ -37,7 +40,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     let unsubscribeProfile: Unsubscribe | undefined;
-    console.log(`AuthContext: Using Firestore instance with databaseId: ${db.toJSON()?.settings?.databaseId || '(default)'}. User collection: "${USERS_COLLECTION}"`);
+    
+    // Log the databaseId of the db instance AuthContext is using
+    const dbInstanceDatabaseId = (db as any)._databaseId?.projectId ? (db as any)._databaseId.databaseId || '(default)' : db.app.options.projectId + '/(default)';
+    console.log(`AuthContext: Using Firestore instance with databaseId: ${dbInstanceDatabaseId}. User collection: "${USERS_COLLECTION}"`);
+
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       console.log("AuthContext: onAuthStateChanged triggered. User:", user?.uid || 'No user');
@@ -66,6 +73,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               email: user.email,
               displayName: user.displayName || user.email?.split('@')[0] || 'Usuario',
               role: ROLES.PENSIONADO, // Default role
+              address: null,
+              phone: null,
+              birthDate: null,
             };
             try {
               await setDoc(userDocRef, defaultProfile);

@@ -8,11 +8,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Mail, UserCircle, Shield, Edit3, Save } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { Mail, UserCircle, Shield, Edit3, Save, Home, Phone, CalendarIcon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase'; // Assuming db is exported from your firebase config
+import { db } from '@/lib/firebase';
+import { format, parseISO } from 'date-fns';
 
 const USERS_COLLECTION = "prometeo_users";
 
@@ -20,14 +23,30 @@ export default function ProfilePage() {
   const { userProfile, currentUser, loading: authLoading } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [displayName, setDisplayName] = useState('');
+  const [address, setAddress] = useState('');
+  const [phone, setPhone] = useState('');
+  const [birthDate, setBirthDate] = useState<Date | undefined>(undefined);
+  
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
-    if (userProfile?.displayName) {
-      setDisplayName(userProfile.displayName);
+    if (userProfile) {
+      setDisplayName(userProfile.displayName || '');
+      setAddress(userProfile.address || '');
+      setPhone(userProfile.phone || '');
+      if (userProfile.birthDate) {
+        try {
+          setBirthDate(parseISO(userProfile.birthDate));
+        } catch (e) {
+          console.error("Error parsing birthDate:", e);
+          setBirthDate(undefined);
+        }
+      } else {
+        setBirthDate(undefined);
+      }
     }
-  }, [userProfile?.displayName]);
+  }, [userProfile]);
 
   if (authLoading) {
     return <div className="text-center p-10">Cargando perfil...</div>;
@@ -51,9 +70,14 @@ export default function ProfilePage() {
     setIsLoading(true);
     try {
       const userDocRef = doc(db, USERS_COLLECTION, currentUser.uid);
-      await updateDoc(userDocRef, { displayName });
-      // Note: AuthContext's onSnapshot should automatically update userProfile.
-      toast({ title: "Perfil actualizado", description: "Tu nombre ha sido guardado." });
+      const updatedData: any = { 
+        displayName,
+        address,
+        phone,
+        birthDate: birthDate ? format(birthDate, 'yyyy-MM-dd') : null,
+      };
+      await updateDoc(userDocRef, updatedData);
+      toast({ title: "Perfil actualizado", description: "Tu información ha sido guardada." });
       setIsEditing(false);
     } catch (error) {
       console.error("Error updating profile:", error);
@@ -63,6 +87,21 @@ export default function ProfilePage() {
     }
   };
 
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    if (userProfile) {
+      setDisplayName(userProfile.displayName || '');
+      setAddress(userProfile.address || '');
+      setPhone(userProfile.phone || '');
+      if (userProfile.birthDate) {
+         try {
+          setBirthDate(parseISO(userProfile.birthDate));
+        } catch (e) { setBirthDate(undefined); }
+      } else {
+        setBirthDate(undefined);
+      }
+    }
+  }
 
   return (
     <div className="space-y-8 max-w-2xl mx-auto">
@@ -116,6 +155,77 @@ export default function ProfilePage() {
           </div>
 
           <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-md">
+            <Home className="h-5 w-5 text-primary" />
+            <div>
+              <Label htmlFor="addressLabel" className="text-xs text-muted-foreground">Dirección</Label>
+              {isEditing ? (
+                <Input 
+                  id="addressEdit"
+                  value={address} 
+                  onChange={(e) => setAddress(e.target.value)} 
+                  placeholder="Ej: Calle Falsa 123, Ciudad"
+                  className="text-md font-medium"
+                />
+              ) : (
+                <p id="addressLabel" className="text-md font-medium">{address || "No especificada"}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-md">
+            <Phone className="h-5 w-5 text-primary" />
+            <div>
+              <Label htmlFor="phoneLabel" className="text-xs text-muted-foreground">Teléfono</Label>
+              {isEditing ? (
+                <Input 
+                  id="phoneEdit"
+                  type="tel"
+                  value={phone} 
+                  onChange={(e) => setPhone(e.target.value)} 
+                  placeholder="Ej: +1 555 123456"
+                  className="text-md font-medium"
+                />
+              ) : (
+                <p id="phoneLabel" className="text-md font-medium">{phone || "No especificado"}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-md">
+            <CalendarIcon className="h-5 w-5 text-primary" />
+            <div>
+              <Label htmlFor="birthDateLabel" className="text-xs text-muted-foreground">Fecha de Nacimiento</Label>
+              {isEditing ? (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className="w-full justify-start text-left font-normal text-md"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {birthDate ? format(birthDate, "PPP") : <span>Selecciona una fecha</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={birthDate}
+                      onSelect={setBirthDate}
+                      initialFocus
+                      captionLayout="dropdown-buttons"
+                      fromYear={1900}
+                      toYear={new Date().getFullYear()}
+                    />
+                  </PopoverContent>
+                </Popover>
+              ) : (
+                <p id="birthDateLabel" className="text-md font-medium">{birthDate ? format(birthDate, "PPP") : "No especificada"}</p>
+              )}
+            </div>
+          </div>
+
+
+          <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-md">
             <Shield className="h-5 w-5 text-primary" />
             <div>
               <Label htmlFor="role" className="text-xs text-muted-foreground">Rol</Label>
@@ -126,7 +236,7 @@ export default function ProfilePage() {
           <div className="flex justify-end space-x-2 pt-4">
             {isEditing ? (
               <>
-                <Button variant="outline" onClick={() => { setIsEditing(false); setDisplayName(userProfile.displayName || ''); }}>Cancelar</Button>
+                <Button variant="outline" onClick={handleCancelEdit}>Cancelar</Button>
                 <Button onClick={handleSave} disabled={isLoading}>
                   {isLoading ? <Save className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                   Guardar
@@ -144,4 +254,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-
