@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 interface Pariss1Data {
   Comparte?: Timestamp;
   afilia?: string;
-  cedula?: string; // This is the link ID
+  cedula?: string; 
   ciudad_iss?: string;
   dir_iss?: string;
   fe_adquiere?: Timestamp;
@@ -39,15 +39,11 @@ interface Pariss1Data {
   tranci?: boolean;
 }
 
-interface Pensionado extends Pariss1Data { // Merged Pariss1Data here
+interface Pensionado extends Pariss1Data { 
   id: string; 
   ano_jubilacion?: string;
   basico?: string;
   cargo?: string;
-  // centroCosto?: string; // From pariss1 typically or use pnlCentroCosto
-  // centroCosto1?: string;
-  // dependencia?: string; // From pariss1 typically or use pnlDependencia
-  // dependencia1?: string;
   documento?: string;
   dtgLiquidacion?: string;
   empleado?: string;
@@ -56,16 +52,9 @@ interface Pensionado extends Pariss1Data { // Merged Pariss1Data here
   fecha?: string; 
   fondoSalud?: string;
   grado?: string;
-  // hBasico?: string; // These seem like header/label strings, not data for a specific pensioner
-  // hCargo?: string;
-  // hEsquema?: string;
-  // hGrado?: string;
   mensaje?: string;
-  neto?: string; // This seems to be a total, not directly part of pensioner base info
+  neto?: string; 
   nitEmpresa?: string;
-  // nivContratacion?: string;
-  // nivContratacion2?: string;
-  // periodoPago?: string; // This is part of a specific 'pago', not general pensioner info
   pnlCentroCosto?: string;
   pnlDependencia?: string;
   pnlMensaje?: string;
@@ -130,9 +119,9 @@ export default function ConsultaPagosPage() {
   const [searchResults, setSearchResults] = useState<Pensionado[]>([]);
   const [viewMode, setViewMode] = useState<'initial' | 'list' | 'details'>('initial');
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalResults, setTotalResults] = useState(0); // More accurately, a flag for "more results exist"
+  const [totalResults, setTotalResults] = useState(0); 
   const [lastVisibleDoc, setLastVisibleDoc] = useState<DocumentData | null>(null);
-  const [firstVisibleDoc, setFirstVisibleDoc] = useState<DocumentData | null>(null); // For 'prev' page, though not fully implemented with cursors
+  const [firstVisibleDoc, setFirstVisibleDoc] = useState<DocumentData | null>(null); 
 
   useEffect(() => {
     const fetchFilterOptions = async () => {
@@ -191,19 +180,19 @@ export default function ConsultaPagosPage() {
       if (page > 1 && startAfterDoc) {
         pensionadosQuery = query(collection(db, PENSIONADOS_COLLECTION), ...queryConstraints, startAfter(startAfterDoc), limit(ITEMS_PER_PAGE + 1));
       } else if (page === 1) {
-         setLastVisibleDoc(null); // Reset for first page
+         setLastVisibleDoc(null); 
       }
 
 
       const pensionadosSnapshot = await getDocs(pensionadosQuery);
       const pensionadosData = pensionadosSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Pensionado));
 
-      setFirstVisibleDoc(pensionadosSnapshot.docs[0] || null); // For potential 'prev' logic
+      setFirstVisibleDoc(pensionadosSnapshot.docs[0] || null); 
       setLastVisibleDoc(pensionadosSnapshot.docs[pensionadosSnapshot.docs.length - (pensionadosData.length > ITEMS_PER_PAGE ? 2 : 1)] || null);
 
 
       setSearchResults(pensionadosData.slice(0, ITEMS_PER_PAGE));
-      setTotalResults(pensionadosData.length); // Used to determine if "Next" should be enabled
+      setTotalResults(pensionadosData.length); 
 
       if (pensionadosData.length === 0) {
         toast({ title: "Sin Resultados", description: "No se encontraron pensionados con los filtros seleccionados.", variant: "default" });
@@ -226,7 +215,7 @@ export default function ConsultaPagosPage() {
   
   const parseCurrencyToNumber = (currencyString: string | undefined | null): number => {
     if (!currencyString) return 0;
-    const cleanedString = currencyString.replace(/\./g, '').replace(',', '.');
+    const cleanedString = String(currencyString).replace(/\./g, '').replace(',', '.');
     const number = parseFloat(cleanedString);
     return isNaN(number) ? 0 : number;
   };
@@ -245,36 +234,43 @@ export default function ConsultaPagosPage() {
       if (pensionadoDocSnap.exists()) {
         let pensionadoData = { id: pensionadoDocSnap.id, ...pensionadoDocSnap.data() } as Pensionado;
 
-        // Fetch additional details from pariss1
-        const pariss1DocRef = doc(db, PARISS1_COLLECTION, pensionadoId); // Assuming pensionadoId is the doc ID for pariss1 as well
+        console.log(`Consulta Pagos: Pensionado ID: ${pensionadoData.id}. Datos iniciales:`, JSON.stringify(pensionadoData));
+
+        const pariss1DocRef = doc(db, PARISS1_COLLECTION, pensionadoId);
         const pariss1DocSnap = await getDoc(pariss1DocRef);
         if (pariss1DocSnap.exists()) {
           pensionadoData = { ...pensionadoData, ...pariss1DocSnap.data() as Pariss1Data };
           toast({ title: "Información Adicional", description: "Detalles de Pariss1 cargados.", variant: "default" });
+          console.log(`Consulta Pagos: Datos de Pariss1 para ${pensionadoData.id} cargados y fusionados.`);
         } else {
           toast({ title: "Advertencia", description: "No se encontraron detalles adicionales en Pariss1 para este pensionado.", variant: "default" });
+          console.warn(`Consulta Pagos: No se encontró documento en Pariss1 para ${pensionadoData.id} en la ruta ${pariss1DocRef.path}`);
         }
         setSelectedPensionado(pensionadoData);
         setViewMode('details');
         
-        // Fetch payments from subcollection
         const pagosCollectionRef = collection(db, PENSIONADOS_COLLECTION, pensionadoData.id, PAGOS_SUBCOLLECTION);
-        const pagosQuery = query(pagosCollectionRef, orderBy("año", "desc"), orderBy("fechaProcesado", "desc"));
+        console.log(`Consulta Pagos: Construida referencia a la subcolección de pagos: ${pagosCollectionRef.path}`);
         
-        console.log(`Consulta Pagos: Intentando obtener pagos para ${pensionadoData.id} desde ${pagosCollectionRef.path}`);
+        const pagosQuery = query(pagosCollectionRef, orderBy("año", "desc"), orderBy("fechaProcesado", "desc"));
+        console.log("Consulta Pagos: Objeto Query de Pagos (configuración):", pagosQuery);
+
         const pagosSnapshot = await getDocs(pagosQuery);
-        console.log(`Consulta Pagos: Se encontraron ${pagosSnapshot.docs.length} documentos de pago para ${pensionadoData.id}. Vacío: ${pagosSnapshot.empty}`);
-
-        const pagos = pagosSnapshot.docs.map(docSnap => {
+        console.log(`Consulta Pagos: Snapshot de pagos recibido. Vacío: ${pagosSnapshot.empty}. Número de documentos: ${pagosSnapshot.docs.length}`);
+        
+        const pagosTemp: Pago[] = [];
+        pagosSnapshot.forEach(docSnap => {
             const data = docSnap.data();
-            // console.log(`Consulta Pagos: Datos brutos del doc de pago ${docSnap.id}:`, JSON.stringify(data));
-            return { id: docSnap.id, ...data } as Pago;
+            console.log(`Consulta Pagos: Documento de pago ID: ${docSnap.id}, Datos Brutos:`, JSON.stringify(data));
+            pagosTemp.push({ id: docSnap.id, ...data } as Pago);
         });
-        setPagosList(pagos);
+        setPagosList(pagosTemp);
+        console.log(`Consulta Pagos: pagosList actualizado con ${pagosTemp.length} pagos.`);
 
-        if (pagos.length > 0) {
+
+        if (pagosTemp.length > 0) {
           const stats: PagosAnualesStats = {};
-          const groupedByYear = pagos.reduce<Record<string, Pago[]>>((acc, pago) => {
+          const groupedByYear = pagosTemp.reduce<Record<string, Pago[]>>((acc, pago) => {
             const yearKey = pago.año || "Sin Año";
             if (!acc[yearKey]) acc[yearKey] = [];
             acc[yearKey].push(pago);
@@ -283,7 +279,7 @@ export default function ConsultaPagosPage() {
 
           for (const year in groupedByYear) {
             const yearPagos = groupedByYear[year];
-            const netos = yearPagos.map(p => parseCurrencyToNumber(p.valorNeto)).filter(n => n !== 0); // filter out 0s if they are not valid payments
+            const netos = yearPagos.map(p => parseCurrencyToNumber(p.valorNeto)).filter(n => n !== 0); 
             if (netos.length > 0) {
               stats[year] = {
                 count: yearPagos.length,
@@ -296,6 +292,7 @@ export default function ConsultaPagosPage() {
             }
           }
           setPagosAnualesStats(stats);
+          console.log(`Consulta Pagos: Estadísticas anuales calculadas:`, JSON.stringify(stats));
         } else {
           console.warn(`Consulta Pagos: No se encontraron pagos efectivos para ${pensionadoData.id}, 'pagosList' está vacío.`);
           setPagosAnualesStats({}); 
@@ -305,13 +302,14 @@ export default function ConsultaPagosPage() {
         setError("No se encontró el pensionado para ver detalles.");
         toast({ title: "No encontrado", description: "Error al cargar detalles del pensionado.", variant: "destructive" });
         setViewMode('list'); 
+        console.error(`Consulta Pagos: No se encontró documento de pensionado con ID: ${pensionadoId} en la ruta ${pensionadoDocRef.path}`);
       }
     } catch (err: any) {
       console.error("Error fetching pensioner details or payments:", err);
       setError("Ocurrió un error al cargar detalles: " + err.message);
       let toastMessage = "No se pudo cargar la información del pensionado o sus pagos.";
       if (err.message && err.message.includes("indexes") && (err.message.includes("año") || err.message.includes("fechaProcesado"))) {
-        toastMessage = `La consulta de pagos (ruta: ${PENSIONADOS_COLLECTION}/${pensionadoId}/${PAGOS_SUBCOLLECTION}) requiere un índice compuesto en Firestore. Revisa la consola del navegador para ver el enlace y crearlo (índice: año DESC, fechaProcesado DESC).`;
+        toastMessage = `La consulta de pagos (ruta: ${PENSIONADOS_COLLECTION}/${pensionadoId}/${PAGOS_SUBCOLLECTION}) requiere un índice compuesto en Firestore. Campos del índice: año (DESC), fechaProcesado (DESC). Revisa la consola del navegador para ver el enlace y crearlo.`;
       } else if (err.message && err.message.includes("indexes")) {
          toastMessage = "La consulta de pensionados por filtro requiere un índice compuesto en Firestore. Revisa la consola del navegador para crearlo.";
       }
@@ -357,7 +355,10 @@ export default function ConsultaPagosPage() {
     if (!timestamp) return 'N/A';
     try {
       if (typeof timestamp === 'string') { 
-        return new Date(timestamp).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+        // Attempt to parse common string formats if necessary, or assume it's already formatted if from Firestore directly as string
+        const d = new Date(timestamp);
+        if (isNaN(d.getTime())) return timestamp; // If parsing fails, return original string
+        return d.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
       }
       return timestamp.toDate().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
     } catch (e) {
