@@ -99,7 +99,8 @@ export default function DashboardLayoutComponent({ children }: { children: React
   };
   
   const pageTitle = navItems.find(item => pathname.startsWith(item.href))?.label || 'Dashboard';
-  const logoUrl = "https://firebasestorage.googleapis.com/v0/b/pensionados-d82b2.appspot.com/o/logos%2Fnegativo.svg?alt=media&token=b3ffeec6-5a49-4f72-b779-72b9643cfa5a";
+  const logoUrl = "https://firebasestorage.googleapis.com/v0/b/pensionados-d82b2.appspot.com/o/logos%2Fpositivo.svg?alt=media&token=5e520b2a-e786-4cfa-a861-447bfcfec826";
+
 
   const MobileSidebar = () => (
     <Sheet>
@@ -111,14 +112,14 @@ export default function DashboardLayoutComponent({ children }: { children: React
       </SheetTrigger>
       <SheetContent side="left" className="p-0 flex flex-col bg-sidebar text-sidebar-foreground w-[280px]">
         <SidebarHeader className="p-4 border-b border-sidebar-border">
-          <Link href="/dashboard" className="flex items-center gap-2">
+          <Link href="/dashboard" className="flex items-center justify-center h-10"> {/* Centered and fixed height */}
             <Image
               src={logoUrl}
               alt="Prometeo Logo"
-              width={32}
-              height={32}
+              width={120} // Adjusted width for better visibility
+              height={40} // Adjusted height
+              priority
             />
-            <h1 className="text-xl font-headline font-semibold text-sidebar-primary-foreground">Prometeo</h1>
           </Link>
         </SidebarHeader>
         <SidebarContent className="flex-1 overflow-y-auto p-4">
@@ -158,16 +159,15 @@ export default function DashboardLayoutComponent({ children }: { children: React
           className="hidden md:flex flex-col border-r border-sidebar-border shadow-lg"
         >
           <SidebarHeader className="p-4 border-b border-sidebar-border">
-             <Link href="/dashboard" className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
+             <Link href="/dashboard" className="flex items-center justify-center h-10 group-data-[collapsible=icon]:justify-center"> {/* Centered and fixed height */}
                 <Image
                   src={logoUrl}
                   alt="Prometeo Logo"
-                  width={32}
-                  height={32}
+                  width={120} // Adjusted width
+                  height={40} // Adjusted height
+                  className="group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:h-8" // Smaller when icon only
+                  priority
                 />
-                <h1 className="text-xl font-headline font-semibold text-sidebar-primary-foreground group-data-[collapsible=icon]:hidden">
-                  Prometeo
-                </h1>
               </Link>
           </SidebarHeader>
           <SidebarContent className="flex-1 overflow-y-auto p-2">
