@@ -37,7 +37,9 @@ export default function ProfilePage() {
       setPhone(userProfile.phone || '');
       if (userProfile.birthDate) {
         try {
-          const parsedDate = parseISO(userProfile.birthDate);
+          // Ensure userProfile.birthDate is a string before parsing
+          const dateString = typeof userProfile.birthDate === 'string' ? userProfile.birthDate : String(userProfile.birthDate);
+          const parsedDate = parseISO(dateString);
           if (isValid(parsedDate)) {
             setBirthDate(parsedDate);
           } else {
@@ -63,8 +65,8 @@ export default function ProfilePage() {
   }
 
   const getInitials = (name?: string | null) => {
-    if (!name) return 'U';
-    const names = name.split(' ');
+    if (!name || name.trim() === '') return 'U';
+    const names = name.trim().split(' ');
     if (names.length > 1 && names[0] && names[names.length - 1]) {
       return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
     }
@@ -80,9 +82,9 @@ export default function ProfilePage() {
     try {
       const userDocRef = doc(db, USERS_COLLECTION, currentUser.uid);
       const updatedData: any = { 
-        displayName,
-        address: address || null,
-        phone: phone || null,
+        displayName: displayName.trim() || null,
+        address: address.trim() || null,
+        phone: phone.trim() || null,
         birthDate: birthDate ? format(birthDate, 'yyyy-MM-dd') : null,
       };
       await updateDoc(userDocRef, updatedData);
@@ -103,7 +105,8 @@ export default function ProfilePage() {
       setPhone(userProfile.phone || '');
       if (userProfile.birthDate) {
          try {
-          const parsedDate = parseISO(userProfile.birthDate);
+          const dateString = typeof userProfile.birthDate === 'string' ? userProfile.birthDate : String(userProfile.birthDate);
+          const parsedDate = parseISO(dateString);
           if (isValid(parsedDate)) {
             setBirthDate(parsedDate);
           } else {
@@ -122,7 +125,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="space-y-8 max-w-2xl mx-auto">
+    <div className="space-y-8 max-w-4xl mx-auto"> {/* Changed max-w-2xl to max-w-4xl */}
       <Card className="shadow-lg">
         <CardHeader className="text-center">
           <Avatar className="mx-auto h-24 w-24 mb-4 border-4 border-primary shadow-md">
@@ -143,7 +146,7 @@ export default function ProfilePage() {
               userProfile.displayName || "Nombre no disponible"
             )}
           </CardTitle>
-          <CardDescription className="text-lg">
+          <CardDescription className="text-lg text-muted-foreground">
             Gestiona la información de tu perfil.
           </CardDescription>
         </CardHeader>
@@ -156,7 +159,7 @@ export default function ProfilePage() {
             </div>
           </div>
           
-          {isEditing && (
+          {isEditing && !userProfile.displayName && ( // Only show if editing AND displayName is initially empty/null
             <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-md">
                 <UserCircle className="h-5 w-5 text-primary" />
                 <div>
@@ -174,7 +177,7 @@ export default function ProfilePage() {
 
           <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-md">
             <Home className="h-5 w-5 text-primary" />
-            <div>
+            <div className="w-full">
               <Label htmlFor="addressLabel" className="text-xs text-muted-foreground">Dirección</Label>
               {isEditing ? (
                 <Input 
@@ -192,7 +195,7 @@ export default function ProfilePage() {
 
           <div className="flex items-center space-x-3 p-3 bg-muted/50 rounded-md">
             <Phone className="h-5 w-5 text-primary" />
-            <div>
+            <div className="w-full">
               <Label htmlFor="phoneLabel" className="text-xs text-muted-foreground">Teléfono</Label>
               {isEditing ? (
                 <Input 
@@ -238,7 +241,7 @@ export default function ProfilePage() {
                 </Popover>
               ) : (
                 <p id="birthDateLabel" className="text-md font-medium">
-                  {userProfile.birthDate && isValid(parseISO(userProfile.birthDate)) ? format(parseISO(userProfile.birthDate), "PPP", { useAdditionalWeekYearTokens: false, useAdditionalDayOfYearTokens: false }) : "No especificada"}
+                  {userProfile.birthDate && isValid(parseISO(typeof userProfile.birthDate === 'string' ? userProfile.birthDate : String(userProfile.birthDate))) ? format(parseISO(typeof userProfile.birthDate === 'string' ? userProfile.birthDate : String(userProfile.birthDate)), "PPP", { useAdditionalWeekYearTokens: false, useAdditionalDayOfYearTokens: false }) : "No especificada"}
                 </p>
               )}
             </div>
