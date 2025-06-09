@@ -42,8 +42,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     let unsubscribeProfile: Unsubscribe | undefined;
     
     // Log the databaseId of the db instance AuthContext is using
-    const dbInstanceDatabaseId = (db as any)._databaseId?.projectId ? (db as any)._databaseId.databaseId || '(default)' : db.app.options.projectId + '/(default)';
-    console.log(`AuthContext: Using Firestore instance with databaseId: ${dbInstanceDatabaseId}. User collection: "${USERS_COLLECTION}"`);
+    const dbInstanceDatabaseId = (db as any)._databaseId?.databaseId || '(default)';
+    console.log(`AuthContext: Using Firestore instance with databaseId: "${dbInstanceDatabaseId}" (Project: ${db.app.options.projectId}). User collection: "${USERS_COLLECTION}"`);
 
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
@@ -52,7 +52,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (user) {
         setLoading(true); 
         const userDocRef = doc(db, USERS_COLLECTION, user.uid);
-        console.log(`AuthContext: Setting up snapshot listener for user ${user.uid} at path ${userDocRef.path}`);
+        console.log(`AuthContext: Setting up snapshot listener for user ${user.uid} at path ${userDocRef.path} in DB "${dbInstanceDatabaseId}"`);
 
         if (unsubscribeProfile) {
           console.log("AuthContext: Unsubscribing from previous profile listener.");
@@ -60,14 +60,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
 
         unsubscribeProfile = onSnapshot(userDocRef, async (docSnap) => {
-          console.log(`AuthContext: Snapshot received for user ${user.uid}. Document exists: ${docSnap.exists()} in collection "${USERS_COLLECTION}"`);
+          console.log(`AuthContext: Snapshot received for user ${user.uid}. Document exists: ${docSnap.exists()} in collection "${USERS_COLLECTION}" (DB: "${dbInstanceDatabaseId}")`);
           if (docSnap.exists()) {
             const profileData = docSnap.data() as UserProfile;
-            console.log(`AuthContext: Profile data from Firestore (collection "${USERS_COLLECTION}"):`, JSON.stringify(profileData));
+            console.log(`AuthContext: Profile data from Firestore (collection "${USERS_COLLECTION}", DB: "${dbInstanceDatabaseId}"):`, JSON.stringify(profileData));
             setUserProfile(profileData);
             setLoading(false);
           } else {
-            console.warn(`AuthContext: User profile for ${user.uid} NOT FOUND in Firestore collection "${USERS_COLLECTION}". Will attempt to create a default 'Pensionado' profile.`);
+            console.warn(`AuthContext: User profile for ${user.uid} NOT FOUND in Firestore collection "${USERS_COLLECTION}" (DB: "${dbInstanceDatabaseId}"). Will attempt to create a default 'Pensionado' profile.`);
             const defaultProfile: UserProfile = {
               uid: user.uid,
               email: user.email,
@@ -79,16 +79,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             };
             try {
               await setDoc(userDocRef, defaultProfile);
-              console.log(`AuthContext: Default 'Pensionado' profile CREATED for ${user.uid} in collection "${USERS_COLLECTION}". The listener should pick this up.`);
+              console.log(`AuthContext: Default 'Pensionado' profile CREATED for ${user.uid} in collection "${USERS_COLLECTION}" (DB: "${dbInstanceDatabaseId}"). The listener should pick this up.`);
               // setLoading(false); // Let the next snapshot (after setDoc) handle setLoading
             } catch (error) {
-              console.error(`AuthContext: Error CREATING default user profile in collection "${USERS_COLLECTION}":`, error);
+              console.error(`AuthContext: Error CREATING default user profile in collection "${USERS_COLLECTION}" (DB: "${dbInstanceDatabaseId}"):`, error);
               setUserProfile(null); 
               setLoading(false); 
             }
           }
         }, (error) => {
-          console.error(`AuthContext: Error listening to user profile for ${user.uid} in collection "${USERS_COLLECTION}":`, error);
+          console.error(`AuthContext: Error listening to user profile for ${user.uid} in collection "${USERS_COLLECTION}" (DB: "${dbInstanceDatabaseId}"):`, error);
           setUserProfile(null);
           setLoading(false);
         });
@@ -128,7 +128,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   
   const isAdmin = userProfile?.role === ROLES.ADMINISTRADOR;
   if (userProfile) {
-    console.log(`AuthContext: isAdmin check: userProfile.role is "${userProfile.role}", ROLES.ADMINISTRADOR is "${ROLES.ADMINISTRADOR}". isAdmin: ${isAdmin}`);
+    const dbInstanceDatabaseId = (db as any)._databaseId?.databaseId || '(default)';
+    console.log(`AuthContext: isAdmin check: userProfile.role is "${userProfile.role}", ROLES.ADMINISTRADOR is "${ROLES.ADMINISTRADOR}". isAdmin: ${isAdmin} (DB: "${dbInstanceDatabaseId}")`);
   }
 
 
@@ -138,4 +139,3 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     </AuthContext.Provider>
   );
 };
-

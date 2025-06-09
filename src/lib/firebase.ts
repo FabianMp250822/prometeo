@@ -15,6 +15,8 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
+const FIREBASE_DATABASE_ID = "prometeo";
+
 let app: FirebaseApp;
 let auth: Auth;
 let db: Firestore;
@@ -34,10 +36,10 @@ if (!getApps().length) {
 auth = getAuth(app);
 storage = getStorage(app);
 
-// Inicializar Firestore para la instancia (default)
-console.log("Firebase: Initializing Firestore for (default) database.");
-db = getFirestore(app); // Esto obtiene la instancia (default)
-console.log(`Firebase: Firestore initialized for (default) database. Instance DB ID: ${db.toJSON()?.settings?.databaseId || '(default)'}`);
+// Inicializar Firestore para la instancia "prometeo"
+console.log(`Firebase: Initializing Firestore for "${FIREBASE_DATABASE_ID}" database.`);
+db = getFirestore(app, FIREBASE_DATABASE_ID);
+console.log(`Firebase: Firestore initialized for "${FIREBASE_DATABASE_ID}" database. Project ID: ${db.app.options.projectId}`);
 
 
 // Operaciones del lado del cliente (AppCheck, Emuladores)
@@ -60,7 +62,7 @@ if (typeof window !== 'undefined') {
   if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
     console.log("Firebase: Connecting to emulators.");
     connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
-    console.log(`Firebase: Connecting Firestore (default) instance to emulator. Instance DB ID: ${db.toJSON()?.settings?.databaseId || '(default)'}`);
+    console.log(`Firebase: Connecting Firestore "${FIREBASE_DATABASE_ID}" instance to emulator on localhost:8080.`);
     connectFirestoreEmulator(db, 'localhost', 8080);
     connectStorageEmulator(storage, 'localhost', 9199);
     console.log("Firebase: Connected to Firebase Emulators.");
@@ -68,4 +70,3 @@ if (typeof window !== 'undefined') {
 }
 
 export { app, auth, db, storage, appCheck };
-
