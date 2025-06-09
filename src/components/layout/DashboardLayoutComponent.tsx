@@ -112,12 +112,12 @@ export default function DashboardLayoutComponent({ children }: { children: React
       </SheetTrigger>
       <SheetContent side="left" className="p-0 flex flex-col bg-sidebar text-sidebar-foreground w-[280px]">
         <SidebarHeader className="p-4 border-b border-sidebar-border">
-          <Link href="/dashboard" className="flex items-center justify-center h-10"> {/* Centered and fixed height */}
+          <Link href="/dashboard" className="flex items-center justify-center h-16"> {/* Adjusted height */}
             <Image
               src={logoUrl}
               alt="Prometeo Logo"
-              width={120} // Adjusted width for better visibility
-              height={40} // Adjusted height
+              width={180} 
+              height={60} 
               priority
             />
           </Link>
@@ -159,13 +159,13 @@ export default function DashboardLayoutComponent({ children }: { children: React
           className="hidden md:flex flex-col border-r border-sidebar-border shadow-lg"
         >
           <SidebarHeader className="p-4 border-b border-sidebar-border">
-             <Link href="/dashboard" className="flex items-center justify-center h-10 group-data-[collapsible=icon]:justify-center"> {/* Centered and fixed height */}
+             <Link href="/dashboard" className="flex items-center justify-center h-16 group-data-[collapsible=icon]:justify-center"> {/* Adjusted height */}
                 <Image
                   src={logoUrl}
                   alt="Prometeo Logo"
-                  width={120} // Adjusted width
-                  height={40} // Adjusted height
-                  className="group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:h-8" // Smaller when icon only
+                  width={180} 
+                  height={60}
+                  className="group-data-[collapsible=icon]:w-12 group-data-[collapsible=icon]:h-12" // Adjusted collapsed size
                   priority
                 />
               </Link>
@@ -273,3 +273,4 @@ export default function DashboardLayoutComponent({ children }: { children: React
     </SidebarProvider>
   );
 }
+
