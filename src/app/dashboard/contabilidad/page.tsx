@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { useSearchParams } from 'next/navigation'; 
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { BookText, UserPlus, CreditCard, History, PlusCircle, UserCog, LineChart, FileText, LayoutGrid } from 'lucide-react';
@@ -36,7 +36,7 @@ const submenuItems: SubmenuItem[] = [
 ];
 
 const DefaultContabilidadView = () => (
-    <Card className="mt-6">
+    <Card> {/* Removed mt-6, spacing primarily handled by parent section's relation to sticky nav */}
         <CardHeader>
             <CardTitle className="flex items-center text-2xl font-headline text-primary">
                 <LayoutGrid className="mr-3 h-7 w-7" />
@@ -54,7 +54,7 @@ const DefaultContabilidadView = () => (
                 {submenuItems.filter(item => item.id !== 'agregar-pago').slice(0,3).map(item => (
                      <Link key={item.id} href={`/dashboard/contabilidad?view=${item.id}`}>
                         <Button asChild variant="outline" className="w-full justify-start text-left h-auto py-3 shadow-sm hover:shadow-md transition-shadow">
-                            <span> {/* Added span to be the direct child for Button with asChild */}
+                            <span>
                                 <item.icon className="mr-3 h-5 w-5 flex-shrink-0 text-primary" />
                                 <div>
                                     <p className="font-semibold text-foreground">{item.label}</p>
@@ -71,16 +71,14 @@ const DefaultContabilidadView = () => (
 
 
 export default function ContabilidadPage() {
-  const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentView = searchParams.get('view');
 
   const ActiveComponent = submenuItems.find(item => item.id === currentView)?.component || DefaultContabilidadView;
 
   return (
-    <div className="space-y-6">
-      <Card className="shadow-md sticky top-[7.5rem] z-10 bg-card/95 backdrop-blur-sm">
+    <div> {/* Removed space-y-6 to manage spacing directly */}
+      <Card className="shadow-md sticky top-[7.5rem] z-10 bg-card/95 backdrop-blur-sm mb-6"> {/* Added mb-6 */}
         <CardHeader className="pb-3 pt-4 px-4">
           <CardTitle className="flex items-center text-xl font-headline text-primary">
             <BookText className="mr-3 h-6 w-6" />
@@ -90,7 +88,7 @@ export default function ContabilidadPage() {
         <CardContent className="p-0">
           <nav className="flex flex-wrap items-center gap-1 border-t border-b px-3 py-2">
             {submenuItems.map((item) => (
-              <Link key={item.id} href={`${pathname}?view=${item.id}`}>
+              <Link key={item.id} href={`/dashboard/contabilidad?view=${item.id}`}>
                 <Button
                   asChild
                   variant={item.isPrimaryAction ? 'default' : (currentView === item.id ? 'secondary' : 'ghost')}
@@ -98,7 +96,7 @@ export default function ContabilidadPage() {
                   className={`font-medium text-xs sm:text-sm px-2 py-1.5 h-auto sm:px-3 sm:py-2 ${item.isPrimaryAction ? 'shadow-md' : ''}`}
                   aria-current={currentView === item.id ? 'page' : undefined}
                 >
-                  <span> {/* Added span to be the direct child for Button with asChild */}
+                  <span>
                     <item.icon className="mr-1.5 h-4 w-4 sm:mr-2 sm:h-4 sm:w-4 flex-shrink-0" />
                     {item.label}
                   </span>
@@ -109,9 +107,11 @@ export default function ContabilidadPage() {
         </CardContent>
       </Card>
 
-      <main className="flex-1 min-w-0">
+      <section className="min-w-0"> {/* Container for the active submodule view */}
         <ActiveComponent />
-      </main>
+      </section>
     </div>
   );
 }
+
+    
