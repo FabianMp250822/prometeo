@@ -95,7 +95,7 @@ interface PagosAnualesStats {
 
 
 const PENSIONADOS_COLLECTION = "pensionados";
-const PARISS1_COLLECTION = "pariss1";
+const PARISS1_COLLECTION = "pariss1"; // Confirmado: todo en minúsculas
 const PAGOS_SUBCOLLECTION = "pagos";
 const ITEMS_PER_PAGE = 10;
 
@@ -236,7 +236,8 @@ export default function ConsultaPagosPage() {
 
         console.log(`Consulta Pagos: Pensionado ID: ${pensionadoData.id}. Datos iniciales:`, JSON.stringify(pensionadoData));
 
-        const pariss1DocRef = doc(db, PARISS1_COLLECTION, pensionadoId);
+        // Obtener datos de PARISS1_COLLECTION
+        const pariss1DocRef = doc(db, PARISS1_COLLECTION, pensionadoData.id); // Usa el ID del pensionado
         const pariss1DocSnap = await getDoc(pariss1DocRef);
         if (pariss1DocSnap.exists()) {
           pensionadoData = { ...pensionadoData, ...pariss1DocSnap.data() as Pariss1Data };
@@ -639,3 +640,4 @@ export default function ConsultaPagosPage() {
   );
 }
 
+    
