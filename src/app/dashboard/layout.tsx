@@ -1,9 +1,15 @@
+
 import DashboardLayoutComponent from '@/components/layout/DashboardLayoutComponent';
+import { PensionadoProvider } from '@/contexts/PensionadoContext';
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return <DashboardLayoutComponent>{children}</DashboardLayoutComponent>;
+  return (
+    <PensionadoProvider>
+      <DashboardLayoutComponent>{children}</DashboardLayoutComponent>
+    </PensionadoProvider>
+  );
 }

@@ -1,9 +1,9 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, collection, getDocs, query, orderBy, Timestamp, where, QueryConstraint, limit, startAfter, DocumentData } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, query, orderBy, Timestamp } from 'firebase/firestore';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -13,97 +13,41 @@ import { Loader2, Search, UserCircle, FileText, AlertCircle, CalendarDays, Recei
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from '@/components/ui/separator';
+import { usePensionadoContext, Pensionado, Pago, PagoDetalle } from '@/contexts/PensionadoContext'; // Importar contexto y tipos
+import { useRouter } from 'next/navigation';
 
-// --- Interfaces (Replicadas o importadas de consulta-pagos o un archivo común) ---
-interface Pariss1Data {
-  Comparte?: Timestamp;
-  afilia?: string;
-  cedula?: string;
-  ciudad_iss?: string;
-  dir_iss?: string;
-  fe_adquiere?: Timestamp;
-  fe_causa?: Timestamp;
-  fe_ingreso?: Timestamp;
-  fe_nacido?: Timestamp;
-  fe_vinculado?: Timestamp;
-  identifica?: number;
-  mesada?: number;
-  pension_ini?: number;
-  regimen?: number;
-  res_ano?: number;
-  res_nro?: string;
-  riesgo?: string;
-  seguro?: number;
-  semanas?: number;
-  sexo?: number;
-  telefono_iss?: number;
-  tranci?: boolean;
-}
-
-interface Pensionado extends Pariss1Data {
-  id: string;
-  ano_jubilacion?: string;
-  basico?: string;
-  cargo?: string;
-  documento?: string;
-  dtgLiquidacion?: string;
-  empleado?: string;
-  empresa?: string;
-  esquema?: string;
-  fecha?: string;
-  fondoSalud?: string;
-  grado?: string;
-  mensaje?: string;
-  neto?: string;
-  nitEmpresa?: string;
-  pnlCentroCosto?: string;
-  pnlDependencia?: string;
-  pnlMensaje?: string;
-  pnlNivContratacion?: string;
-}
-
-interface PagoDetalle {
-  codigo: string | null;
-  egresos: number;
-  ingresos: number;
-  nombre: string;
-}
-
-interface Pago {
-  id: string;
-  año?: string;
-  basico?: string;
-  detalles?: PagoDetalle[];
-  fechaLiquidacion?: string; // Podría ser string o Timestamp
-  fechaProcesado?: Timestamp;
-  grado?: string;
-  periodoPago?: string;
-  procesado?: boolean;
-  valorLiquidado?: string;
-  valorNeto?: string;
-}
 
 // --- Constantes de Colección ---
 const PENSIONADOS_COLLECTION = "pensionados";
-const PARISS1_COLLECTION = "pariss1";
+const PARISS1_COLLECTION = "pariss1"; // Asumiendo que Pariss1Data viene de Pensionado
 const PAGOS_SUBCOLLECTION = "pagos";
 
 export default function PagosDetallePage() {
   const { toast } = useToast();
+  const router = useRouter();
+  const { 
+    contextPensionado, 
+    contextPagos, 
+    setContextPensionadoData, 
+    clearContextPensionadoData,
+    isContextLoading,
+    setContextIsLoading
+  } = usePensionadoContext();
+
   const [documentoInput, setDocumentoInput] = useState<string>("");
   const [selectedPensionado, setSelectedPensionado] = useState<Pensionado | null>(null);
   const [allPagosList, setAllPagosList] = useState<Pago[]>([]);
   const [selectedPago, setSelectedPago] = useState<Pago | null>(null);
 
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false); // Loading local de la página
   const [error, setError] = useState<string | null>(null);
 
   const [availableYears, setAvailableYears] = useState<string[]>([]);
-  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
+  const [availableMonths, setAvailableMonths] = useState<string[]>([]); // Formato "NombreMes (NumeroMes)"
   const [selectedYearFilter, setSelectedYearFilter] = useState<string | undefined>(undefined);
   const [selectedMonthFilter, setSelectedMonthFilter] = useState<string | undefined>(undefined);
 
-  // --- Funciones de Formato (Replicadas o importadas) ---
+
   const parseCurrencyToNumber = (currencyString: string | undefined | null): number => {
     if (!currencyString) return 0;
     const cleanedString = String(currencyString).replace(/\./g, '').replace(',', '.');
@@ -111,7 +55,7 @@ export default function PagosDetallePage() {
     return isNaN(number) ? 0 : number;
   };
 
-  const formatFirebaseTimestamp = (timestamp: Timestamp | undefined | string, options?: Intl.DateTimeFormatOptions): string => {
+  const formatFirebaseTimestamp = (timestamp: Timestamp | undefined | string | {seconds: number, nanoseconds: number}, options?: Intl.DateTimeFormatOptions): string => {
     if (!timestamp) return 'N/A';
     const defaultOptions: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' };
     try {
@@ -120,17 +64,19 @@ export default function PagosDetallePage() {
         if (isNaN(d.getTime())) return 'N/A';
         return d.toLocaleDateString('es-CO', options || defaultOptions);
       }
-      return timestamp.toDate().toLocaleDateString('es-CO', options || defaultOptions);
+      if (timestamp instanceof Timestamp) {
+        return timestamp.toDate().toLocaleDateString('es-CO', options || defaultOptions);
+      }
+      // Manejar el caso donde el timestamp viene del contexto y podría ser un objeto simple
+      if (typeof timestamp === 'object' && 'seconds' in timestamp && 'nanoseconds' in timestamp) {
+        return new Date(timestamp.seconds * 1000).toLocaleDateString('es-CO', options || defaultOptions);
+      }
+      return 'N/A';
     } catch (e) {
       console.warn("Could not format timestamp:", timestamp, e);
       return 'N/A';
     }
   };
-  
-  const formatMonthYearFromTimestamp = (timestamp: Timestamp | undefined | string): string => {
-     if (!timestamp) return 'N/A';
-     return formatFirebaseTimestamp(timestamp, { month: 'long', year: 'numeric'});
-  }
 
   const formatCurrency = (value: string | number | undefined | null, addSymbol: boolean = true): string => {
     if (value === undefined || value === null) return addSymbol ? '$0,00' : '0,00';
@@ -139,15 +85,151 @@ export default function PagosDetallePage() {
     const prefix = addSymbol ? '$' : '';
     return `${prefix}${numValue.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
+  
+  const getMonthNameFromTimestamp = (ts: Timestamp | {seconds: number, nanoseconds: number} | undefined): string => {
+    if (!ts) return "MesDesconocido";
+    let date: Date;
+    if (ts instanceof Timestamp) {
+        date = ts.toDate();
+    } else if (typeof ts === 'object' && 'seconds' in ts) {
+        date = new Date(ts.seconds * 1000);
+    } else {
+        return "MesDesconocido";
+    }
+    return date.toLocaleDateString('es-CO', { month: 'long' });
+  };
+  
+  const getMonthNumberFromTimestamp = (ts: Timestamp | {seconds: number, nanoseconds: number} | undefined): number => {
+    if (!ts) return 0; // 0 para mes desconocido
+    let date: Date;
+    if (ts instanceof Timestamp) {
+        date = ts.toDate();
+    } else if (typeof ts === 'object' && 'seconds' in ts) {
+        date = new Date(ts.seconds * 1000);
+    } else {
+        return 0;
+    }
+    return date.getMonth() + 1; // 1-12
+  };
 
 
-  // --- Lógica de Carga y Búsqueda ---
+  const updateMonthFilterOptions = useCallback((year: string, pagos: Pago[]) => {
+      const months = new Set<string>();
+      pagos.forEach(p => {
+          let paymentYear = "";
+          if (p.fechaProcesado) {
+              const date = (p.fechaProcesado instanceof Timestamp) ? p.fechaProcesado.toDate() : new Date((p.fechaProcesado as any).seconds * 1000);
+              paymentYear = date.getFullYear().toString();
+          } else if (p.año) {
+              paymentYear = p.año;
+          }
+
+          if (paymentYear === year && p.fechaProcesado) {
+              const monthName = getMonthNameFromTimestamp(p.fechaProcesado);
+              const monthNum = getMonthNumberFromTimestamp(p.fechaProcesado);
+              if (monthNum > 0) {
+                 months.add(`${monthName.charAt(0).toUpperCase() + monthName.slice(1)} (${monthNum})`);
+              }
+          }
+      });
+      // Ordenar meses por número de mes
+      const sortedMonths = Array.from(months).sort((a,b) => {
+          const numA = parseInt(a.match(/\((\d+)\)/)?.[1] || "0");
+          const numB = parseInt(b.match(/\((\d+)\)/)?.[1] || "0");
+          return numA - numB;
+      });
+      setAvailableMonths(sortedMonths);
+
+      // Si el pago actualmente seleccionado pertenece al año nuevo, intentar mantener el mes. Sino, el primero.
+      let monthToSet: string | undefined = undefined;
+      if (selectedPago && selectedPago.fechaProcesado) {
+          const selectedPagoYear = (selectedPago.fechaProcesado instanceof Timestamp) ? selectedPago.fechaProcesado.toDate().getFullYear().toString() : new Date((selectedPago.fechaProcesado as any).seconds * 1000).getFullYear().toString();
+          if (selectedPagoYear === year) {
+              const currentMonthName = getMonthNameFromTimestamp(selectedPago.fechaProcesado);
+              const currentMonthNum = getMonthNumberFromTimestamp(selectedPago.fechaProcesado);
+              const currentMonthFilterValue = `${currentMonthName.charAt(0).toUpperCase() + currentMonthName.slice(1)} (${currentMonthNum})`;
+              if (sortedMonths.includes(currentMonthFilterValue)) {
+                  monthToSet = currentMonthFilterValue;
+              }
+          }
+      }
+      
+      if (!monthToSet && sortedMonths.length > 0) {
+          monthToSet = sortedMonths[0]; // Por defecto el primer mes disponible del nuevo año
+      }
+      setSelectedMonthFilter(monthToSet);
+
+  }, [selectedPago]); // selectedPago como dependencia
+
+
+  // Efecto para cargar datos desde el contexto
+  useEffect(() => {
+    if (!isContextLoading && contextPensionado && contextPagos) {
+      console.log("PagosDetallePage: Cargando datos desde PensionadoContext. Pensionado ID:", contextPensionado.id);
+      setIsLoading(true); // Indicar carga local
+      setSelectedPensionado(contextPensionado);
+      setAllPagosList(contextPagos);
+      setDocumentoInput(contextPensionado.id); // Llenar el input
+      setError(null);
+
+      if (contextPagos.length > 0) {
+        setSelectedPago(contextPagos[0]); // Mostrar el último pago por defecto
+        
+        const years = new Set<string>();
+        contextPagos.forEach(p => {
+            if (p.fechaProcesado) {
+                const date = (p.fechaProcesado instanceof Timestamp) ? p.fechaProcesado.toDate() : new Date((p.fechaProcesado as any).seconds * 1000);
+                const year = date.getFullYear().toString();
+                years.add(year);
+            } else if (p.año) {
+                years.add(p.año);
+            }
+        });
+        const sortedYears = Array.from(years).sort((a, b) => b.localeCompare(a)); // Más reciente primero
+        setAvailableYears(sortedYears);
+
+        if (sortedYears.length > 0) {
+            const latestYear = sortedYears[0];
+            setSelectedYearFilter(latestYear);
+            updateMonthFilterOptions(latestYear, contextPagos);
+        } else {
+            setAvailableMonths([]);
+            setSelectedMonthFilter(undefined);
+        }
+      } else {
+        setSelectedPago(null);
+        setAvailableYears([]);
+        setAvailableMonths([]);
+        setSelectedYearFilter(undefined);
+        setSelectedMonthFilter(undefined);
+        toast({ title: "Sin Pagos", description: "Este pensionado no tiene registros de pago en el contexto.", variant: "default" });
+      }
+      setIsLoading(false);
+    } else if (!isContextLoading && !contextPensionado) {
+      // Si no hay datos en el contexto y el contexto no está cargando,
+      // la página se cargó directamente o el contexto está vacío. Limpiar.
+      console.log("PagosDetallePage: No hay datos en PensionadoContext o contexto está limpio.");
+      setSelectedPensionado(null);
+      setAllPagosList([]);
+      setSelectedPago(null);
+      setDocumentoInput(""); // Limpiar input para nueva búsqueda
+      setAvailableYears([]);
+      setAvailableMonths([]);
+      setSelectedYearFilter(undefined);
+      setSelectedMonthFilter(undefined);
+      setError(null);
+      setIsLoading(false);
+    }
+  }, [contextPensionado, contextPagos, isContextLoading, toast, updateMonthFilterOptions]);
+  
+
   const fetchPensionadoYPagos = async (pensionadoId: string) => {
     if (!pensionadoId.trim()) {
         toast({ title: "Documento Requerido", description: "Por favor, ingrese un número de documento.", variant: "destructive" });
         return;
     }
     setIsLoading(true);
+    setContextIsLoading(true); // Indicar que el contexto podría actualizarse
     setError(null);
     setSelectedPensionado(null);
     setAllPagosList([]);
@@ -164,6 +246,8 @@ export default function PagosDetallePage() {
       if (!pensionadoDocSnap.exists()) {
         setError("No se encontró el pensionado con el documento ingresado.");
         toast({ title: "No Encontrado", description: "Verifique el número de documento.", variant: "destructive" });
+        clearContextPensionadoData(); // Limpiar contexto si no se encuentra
+        setContextIsLoading(false);
         setIsLoading(false);
         return;
       }
@@ -173,113 +257,87 @@ export default function PagosDetallePage() {
       const pariss1DocRef = doc(db, PARISS1_COLLECTION, pensionadoData.id);
       const pariss1DocSnap = await getDoc(pariss1DocRef);
       if (pariss1DocSnap.exists()) {
-        pensionadoData = { ...pensionadoData, ...pariss1DocSnap.data() as Pariss1Data };
+        pensionadoData = { ...pensionadoData, ...pariss1DocSnap.data() as any }; // 'any' por si Pariss1Data es diferente
       }
-      setSelectedPensionado(pensionadoData);
+      // No actualizamos selectedPensionado aquí, lo haremos desde el contexto o después de cargar pagos
 
       const pagosCollectionRef = collection(db, PENSIONADOS_COLLECTION, pensionadoData.id, PAGOS_SUBCOLLECTION);
-      const pagosQuery = query(pagosCollectionRef, orderBy("fechaProcesado", "desc")); // Más reciente primero
+      const pagosQuery = query(pagosCollectionRef, orderBy("fechaProcesado", "desc"));
       const pagosSnapshot = await getDocs(pagosQuery);
 
       const pagosTemp: Pago[] = [];
       pagosSnapshot.forEach(docSnap => {
         pagosTemp.push({ id: docSnap.id, ...docSnap.data() } as Pago);
       });
-      setAllPagosList(pagosTemp);
+      
+      // Actualizar el contexto global
+      setContextPensionadoData(pensionadoData, pagosTemp);
+      // El useEffect se encargará de actualizar el estado local desde el contexto
 
-      if (pagosTemp.length > 0) {
-        setSelectedPago(pagosTemp[0]); // Mostrar el último pago por defecto
-        
-        // Poblar filtros de año/mes
-        const years = new Set<string>();
-        pagosTemp.forEach(p => {
-            if (p.fechaProcesado) {
-                 const year = p.fechaProcesado.toDate().getFullYear().toString();
-                 years.add(year);
-            } else if (p.año) { // Fallback al campo 'año' si fechaProcesado no existe
-                 years.add(p.año);
-            }
-        });
-        const sortedYears = Array.from(years).sort((a, b) => b.localeCompare(a));
-        setAvailableYears(sortedYears);
-        if (sortedYears.length > 0) {
-            const latestYear = sortedYears[0];
-            setSelectedYearFilter(latestYear);
-            updateMonthFilter(latestYear, pagosTemp);
-        }
-
-      } else {
-        toast({ title: "Sin Pagos", description: "Este pensionado no tiene registros de pago.", variant: "default" });
-      }
 
     } catch (err: any) {
       console.error("Error fetching pensioner details or payments:", err);
       setError("Ocurrió un error al cargar los datos: " + err.message);
       toast({ title: "Error", description: "No se pudo cargar la información.", variant: "destructive" });
+      clearContextPensionadoData();
     } finally {
-      setIsLoading(false);
+      setIsLoading(false); // Carga local terminada
+      setContextIsLoading(false); // Carga de contexto terminada
     }
   };
   
-  const updateMonthFilter = (year: string, pagos: Pago[]) => {
-      const months = new Set<string>();
-      pagos.forEach(p => {
-          let paymentYear = "";
-          if (p.fechaProcesado) {
-              paymentYear = p.fechaProcesado.toDate().getFullYear().toString();
-          } else if (p.año) {
-              paymentYear = p.año;
-          }
-
-          if (paymentYear === year && p.fechaProcesado) {
-              const monthNum = p.fechaProcesado.toDate().getMonth(); // 0-11
-              // Formatear mes con nombre completo para el Select (ej. "Enero", "Febrero")
-              const monthName = p.fechaProcesado.toDate().toLocaleDateString('es-CO', { month: 'long' });
-              months.add(monthName.charAt(0).toUpperCase() + monthName.slice(1) + ` (${monthNum + 1})`);
-          }
-      });
-      const sortedMonths = Array.from(months).sort((a,b) => parseInt(a.match(/\((\d+)\)/)?.[1] || "0") - parseInt(b.match(/\((\d+)\)/)?.[1] || "0")  );
-      setAvailableMonths(sortedMonths);
-      if (sortedMonths.length > 0 && selectedPago && selectedPago.fechaProcesado && selectedPago.fechaProcesado.toDate().getFullYear().toString() === year) {
-          const currentMonthName = selectedPago.fechaProcesado.toDate().toLocaleDateString('es-CO', { month: 'long' });
-          const currentMonthNum = selectedPago.fechaProcesado.toDate().getMonth() + 1;
-          setSelectedMonthFilter(currentMonthName.charAt(0).toUpperCase() + currentMonthName.slice(1) + ` (${currentMonthNum})`);
-      } else if (sortedMonths.length > 0) {
-          setSelectedMonthFilter(sortedMonths[0]);
-      } else {
-          setSelectedMonthFilter(undefined);
-      }
-  };
-
+  // Efecto para actualizar el mes si el año cambia
   useEffect(() => {
     if (selectedYearFilter && allPagosList.length > 0) {
-        updateMonthFilter(selectedYearFilter, allPagosList);
+        updateMonthFilterOptions(selectedYearFilter, allPagosList);
+    } else if (!selectedYearFilter) { // Si se deselecciona el año
+        setAvailableMonths([]);
+        setSelectedMonthFilter(undefined);
     }
-  }, [selectedYearFilter, allPagosList]);
+  }, [selectedYearFilter, allPagosList, updateMonthFilterOptions]);
 
 
+  // Efecto para actualizar el pago seleccionado cuando cambian los filtros de año/mes
   useEffect(() => {
     if (selectedYearFilter && selectedMonthFilter && allPagosList.length > 0) {
         const monthNumberToFind = parseInt(selectedMonthFilter.match(/\((\d+)\)/)?.[1] || "0");
-        if (monthNumberToFind === 0) return;
+        if (monthNumberToFind === 0) {
+            setSelectedPago(null); // Mes inválido o no seleccionado
+            return;
+        }
 
         const pagoEncontrado = allPagosList.find(p => {
             if (!p.fechaProcesado) return false;
-            const pagoAnio = p.fechaProcesado.toDate().getFullYear().toString();
-            const pagoMes = p.fechaProcesado.toDate().getMonth() + 1; // 1-12
+            const date = (p.fechaProcesado instanceof Timestamp) ? p.fechaProcesado.toDate() : new Date((p.fechaProcesado as any).seconds * 1000);
+            const pagoAnio = date.getFullYear().toString();
+            const pagoMes = date.getMonth() + 1; // 1-12
             return pagoAnio === selectedYearFilter && pagoMes === monthNumberToFind;
         });
         setSelectedPago(pagoEncontrado || null);
-    } else if (allPagosList.length > 0 && !selectedYearFilter && !selectedMonthFilter) {
-        // Si se limpian los filtros, volver al más reciente
+        if (!pagoEncontrado) {
+            toast({ title: "Sin Pago", description: `No se encontró un pago para ${selectedMonthFilter} de ${selectedYearFilter}.`, variant: "default" });
+        }
+
+    } else if (allPagosList.length > 0 && (!selectedYearFilter || !selectedMonthFilter)) {
+        // Si se limpian los filtros o no están completos, volver al más reciente por defecto
         setSelectedPago(allPagosList[0]);
-         if (availableYears.length > 0) setSelectedYearFilter(availableYears[0]);
+         if (availableYears.length > 0 && !selectedYearFilter) {
+             const latestYear = availableYears[0];
+             setSelectedYearFilter(latestYear); 
+             // El efecto de cambio de año se encargará de los meses y el pago
+         } else if (availableYears.length > 0 && selectedYearFilter && !selectedMonthFilter && availableMonths.length > 0){
+             // Año seleccionado pero mes no, seleccionar el primer mes
+             setSelectedMonthFilter(availableMonths[0]);
+         }
+    } else if (allPagosList.length === 0) {
+        setSelectedPago(null); // No hay pagos, no hay nada que seleccionar
     }
 
-  }, [selectedYearFilter, selectedMonthFilter, allPagosList, availableYears]);
+  }, [selectedYearFilter, selectedMonthFilter, allPagosList, availableYears, availableMonths, toast]);
 
 
   const handleSearch = () => {
+    // No limpiar el contexto aquí, fetchPensionadoYPagos lo hará si es necesario
     fetchPensionadoYPagos(documentoInput);
   };
 
@@ -293,26 +351,37 @@ export default function PagosDetallePage() {
     return selectedPago.detalles.reduce((sum, item) => sum + (item.egresos || 0), 0);
   }, [selectedPago]);
 
+  if (isLoading && !selectedPensionado) { // Pantalla de carga inicial si isLoading y no hay pensionado del contexto
+     return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
+        <Loader2 className="mr-2 h-8 w-8 animate-spin text-primary" />
+        <p className="text-lg text-muted-foreground">Cargando datos del pensionado...</p>
+      </div>
+    );
+  }
+
 
   return (
     <div className="space-y-6">
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="text-2xl font-headline text-primary flex items-center">
-            <Receipt className="mr-3 h-7 w-7" /> Detalle de Pagos
+            <Receipt className="mr-3 h-7 w-7" /> Detalle de Pagos (Comprobantes)
           </CardTitle>
           <CardDescription>
-            Busque un pensionado por documento para ver el detalle de sus pagos.
+            {selectedPensionado 
+              ? `Mostrando comprobantes para ${selectedPensionado.empleado || selectedPensionado.id}. Use los filtros o busque otro pensionado.`
+              : "Busque un pensionado por documento para ver el detalle de sus pagos."}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col sm:flex-row gap-4 mb-6 items-end">
             <div className="flex-grow space-y-1">
               <Label htmlFor="documentoInputPago">Número de Documento</Label>
-              <Input id="documentoInputPago" type="text" value={documentoInput} onChange={(e) => setDocumentoInput(e.target.value)} placeholder="Ingrese documento del pensionado" disabled={isLoading} className="text-base"/>
+              <Input id="documentoInputPago" type="text" value={documentoInput} onChange={(e) => setDocumentoInput(e.target.value)} placeholder="Ingrese documento del pensionado" disabled={isLoading || isContextLoading} className="text-base"/>
             </div>
-            <Button onClick={handleSearch} disabled={isLoading} className="w-full sm:w-auto text-base">
-              {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Search className="mr-2 h-5 w-5" />}
+            <Button onClick={handleSearch} disabled={isLoading || isContextLoading} className="w-full sm:w-auto text-base">
+              {(isLoading || isContextLoading) ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Search className="mr-2 h-5 w-5" />}
               Buscar Pensionado
             </Button>
           </div>
@@ -324,6 +393,7 @@ export default function PagosDetallePage() {
         </CardContent>
       </Card>
 
+      {/* Solo mostrar la sección de comprobante si hay un pensionado seleccionado y un pago seleccionado */}
       {selectedPensionado && selectedPago && (
         <Card className="shadow-xl overflow-hidden">
           <CardHeader className="bg-muted/30 p-4 sm:p-6">
@@ -336,15 +406,16 @@ export default function PagosDetallePage() {
                         {selectedPensionado.empleado || 'N/A'} (C.C. {selectedPensionado.id})
                     </CardDescription>
                 </div>
-                <div className="flex gap-2 mt-2 sm:mt-0">
-                    <Select value={selectedYearFilter} onValueChange={setSelectedYearFilter} disabled={availableYears.length === 0}>
-                        <SelectTrigger className="w-[120px] text-sm"><SelectValue placeholder="Año" /></SelectTrigger>
+                <div className="flex gap-2 mt-2 sm:mt-0 items-center">
+                    <Label className="text-sm hidden sm:inline">Filtrar por:</Label>
+                    <Select value={selectedYearFilter} onValueChange={setSelectedYearFilter} disabled={availableYears.length === 0 || isLoading}>
+                        <SelectTrigger className="w-full sm:w-[120px] text-sm"><SelectValue placeholder="Año" /></SelectTrigger>
                         <SelectContent>
                             {availableYears.map(year => <SelectItem key={year} value={year}>{year}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                     <Select value={selectedMonthFilter} onValueChange={setSelectedMonthFilter} disabled={availableMonths.length === 0}>
-                        <SelectTrigger className="w-[150px] text-sm"><SelectValue placeholder="Mes" /></SelectTrigger>
+                     <Select value={selectedMonthFilter} onValueChange={setSelectedMonthFilter} disabled={availableMonths.length === 0 || isLoading}>
+                        <SelectTrigger className="w-full sm:w-[180px] text-sm"><SelectValue placeholder="Mes" /></SelectTrigger>
                         <SelectContent>
                             {availableMonths.map(month => <SelectItem key={month} value={month}>{month}</SelectItem>)}
                         </SelectContent>
@@ -354,7 +425,6 @@ export default function PagosDetallePage() {
           </CardHeader>
           
           <CardContent className="p-4 sm:p-6 space-y-4 text-sm">
-            {/* Encabezado de la Nómina */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-2 border-b pb-4">
               <div><strong>Nombre:</strong> {selectedPensionado.empleado || 'N/A'}</div>
               <div><strong>Documento:</strong> {selectedPensionado.id}</div>
@@ -364,7 +434,7 @@ export default function PagosDetallePage() {
               <div><strong>Centro Costo:</strong> {selectedPensionado.pnlCentroCosto || 'N/A'}</div>
               <div><strong>Dependencia:</strong> {selectedPensionado.pnlDependencia?.replace(/^V\d+-/, '') || 'N/A'}</div>
               <div><strong>Esquema:</strong> {selectedPensionado.esquema || 'N/A'}</div>
-              <div><strong>Grado:</strong> {selectedPensionado.grado || 'N/A'}</div>
+              <div><strong>Grado:</strong> {selectedPago.grado || selectedPensionado.grado || 'N/A'}</div>
               
               <Separator className="col-span-full my-1" />
               
@@ -373,7 +443,6 @@ export default function PagosDetallePage() {
               <div className="font-semibold text-primary col-span-2"><strong>Fecha Procesado:</strong> {formatFirebaseTimestamp(selectedPago.fechaProcesado, { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
             </div>
 
-            {/* Tabla de Detalles del Pago */}
             <div className="overflow-x-auto rounded-md border">
               <Table>
                 <TableHeader className="bg-muted/50">
@@ -397,7 +466,6 @@ export default function PagosDetallePage() {
               </Table>
             </div>
             
-            {/* Totales y Neto */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t">
                 <div className="sm:col-start-2">
                     <Label className="text-xs text-muted-foreground">Total Ingresos</Label>
@@ -427,29 +495,40 @@ export default function PagosDetallePage() {
         </Card>
       )}
 
-      {!selectedPensionado && !isLoading && !error && (
+      {/* Mensajes si no hay pensionado o no hay pagos */}
+      {!selectedPensionado && !isLoading && !isContextLoading && !error && (
         <Card className="mt-6 shadow-sm border-dashed border-muted-foreground/50">
           <CardContent className="pt-6">
             <div className="text-center text-muted-foreground py-12">
               <Banknote className="mx-auto h-16 w-16 mb-4 text-primary/30" />
               <p className="text-lg font-semibold">Consulte un Pensionado</p>
-              <p className="text-sm">Ingrese el número de documento para ver los detalles de sus pagos.</p>
+              <p className="text-sm">Ingrese el número de documento para ver los detalles de sus pagos o seleccione uno desde la página de Consulta de Pagos.</p>
             </div>
           </CardContent>
         </Card>
       )}
-       {selectedPensionado && allPagosList.length === 0 && !isLoading && (
+       {selectedPensionado && allPagosList.length === 0 && !isLoading && !isContextLoading && (
         <Card className="mt-6 shadow-sm border-dashed border-muted-foreground/50">
             <CardContent className="pt-6">
                 <div className="text-center text-muted-foreground py-12">
                     <FileText className="mx-auto h-16 w-16 mb-4 text-primary/30" />
                     <p className="text-lg font-semibold">Sin Registros de Pago</p>
-                    <p className="text-sm">El pensionado seleccionado no tiene historial de pagos en el sistema.</p>
+                    <p className="text-sm">El pensionado seleccionado ({selectedPensionado.empleado || selectedPensionado.id}) no tiene historial de pagos en el sistema.</p>
                 </div>
             </CardContent>
         </Card>
       )}
+       {selectedPensionado && allPagosList.length > 0 && !selectedPago && !isLoading && !isContextLoading && (
+         <Card className="mt-6 shadow-sm border-dashed border-muted-foreground/50">
+            <CardContent className="pt-6">
+                <div className="text-center text-muted-foreground py-12">
+                    <CalendarDays className="mx-auto h-16 w-16 mb-4 text-primary/30" />
+                    <p className="text-lg font-semibold">Seleccione un Periodo</p>
+                    <p className="text-sm">Use los filtros de año y mes para ver un comprobante de pago específico.</p>
+                </div>
+            </CardContent>
+        </Card>
+       )}
     </div>
   );
 }
-

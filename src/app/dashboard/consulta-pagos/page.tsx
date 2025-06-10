@@ -4,17 +4,19 @@
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, collection, getDocs, query, orderBy, Timestamp, where, QueryConstraint, limit, startAfter, DocumentData } from 'firebase/firestore';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Search, UserCircle, FileText, AlertCircle, ChevronLeft, ChevronRight, ListChecks, CalendarDays, TrendingUp, TrendingDown, DollarSign, Hash } from 'lucide-react';
+import { Loader2, Search, UserCircle, FileText, AlertCircle, ChevronLeft, ChevronRight, ListChecks, CalendarDays, TrendingUp, TrendingDown, DollarSign, Hash, ChevronsRight } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { usePensionadoContext, Pensionado, Pago } from '@/contexts/PensionadoContext'; // Importar contexto y tipos
+import Link from 'next/link';
 
-// Define interfaces for data structures
-interface Pariss1Data {
+// Interfaces locales específicas si son diferentes o más detalladas que las del contexto
+interface Pariss1DataLocal { // Renombrado para evitar conflicto si las del contexto son más genéricas
   Comparte?: Timestamp;
   afilia?: string;
   cedula?: string;
@@ -39,48 +41,8 @@ interface Pariss1Data {
   tranci?: boolean;
 }
 
-interface Pensionado extends Pariss1Data {
-  id: string;
-  ano_jubilacion?: string;
-  basico?: string;
-  cargo?: string;
-  documento?: string;
-  dtgLiquidacion?: string;
-  empleado?: string;
-  empresa?: string;
-  esquema?: string;
-  fecha?: string;
-  fondoSalud?: string;
-  grado?: string;
-  mensaje?: string;
-  neto?: string;
-  nitEmpresa?: string;
-  pnlCentroCosto?: string;
-  pnlDependencia?: string;
-  pnlMensaje?: string;
-  pnlNivContratacion?: string;
-}
-
-interface PagoDetalle {
-  codigo: string | null;
-  egresos: number;
-  ingresos: number;
-  nombre: string;
-}
-
-interface Pago {
-  id: string;
-  año?: string;
-  basico?: string;
-  detalles?: PagoDetalle[];
-  fechaLiquidacion?: string;
-  fechaProcesado?: Timestamp;
-  grado?: string;
-  periodoPago?: string;
-  procesado?: boolean;
-  valorLiquidado?: string;
-  valorNeto?: string;
-}
+interface PensionadoLocal extends Pariss1DataLocal, Pensionado {} // Usa Pensionado del contexto y extiende
+interface PagoLocal extends Pago {} // Usa Pago del contexto
 
 interface PagosYearSummary {
   count: number;
@@ -101,9 +63,11 @@ const ITEMS_PER_PAGE = 10;
 
 export default function ConsultaPagosPage() {
   const { toast } = useToast();
+  const { setContextPensionadoData, clearContextPensionadoData, setContextIsLoading } = usePensionadoContext();
+
   const [documentoInput, setDocumentoInput] = useState<string>("");
-  const [selectedPensionado, setSelectedPensionado] = useState<Pensionado | null>(null);
-  const [pagosList, setPagosList] = useState<Pago[]>([]);
+  const [selectedPensionado, setSelectedPensionado] = useState<PensionadoLocal | null>(null);
+  const [pagosList, setPagosList] = useState<PagoLocal[]>([]);
   const [pagosAnualesStats, setPagosAnualesStats] = useState<PagosAnualesStats>({});
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -116,7 +80,7 @@ export default function ConsultaPagosPage() {
   const [distinctDependencias, setDistinctDependencias] = useState<string[]>([]);
   const [originalDependenciasMap, setOriginalDependenciasMap] = useState<Record<string, string>>({});
 
-  const [searchResults, setSearchResults] = useState<Pensionado[]>([]);
+  const [searchResults, setSearchResults] = useState<PensionadoLocal[]>([]);
   const [viewMode, setViewMode] = useState<'initial' | 'list' | 'details'>('initial');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
@@ -185,7 +149,7 @@ export default function ConsultaPagosPage() {
 
 
       const pensionadosSnapshot = await getDocs(pensionadosQuery);
-      const pensionadosData = pensionadosSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Pensionado));
+      const pensionadosData = pensionadosSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as PensionadoLocal));
 
       setFirstVisibleDoc(pensionadosSnapshot.docs[0] || null);
       setLastVisibleDoc(pensionadosSnapshot.docs[pensionadosSnapshot.docs.length - (pensionadosData.length > ITEMS_PER_PAGE ? 2 : 1)] || null);
@@ -222,6 +186,7 @@ export default function ConsultaPagosPage() {
 
   const fetchPensionadoDetails = async (pensionadoId: string) => {
     setIsLoading(true);
+    setContextIsLoading(true); // Indicar que el contexto se está actualizando
     setError(null);
     setSelectedPensionado(null);
     setPagosList([]);
@@ -232,14 +197,13 @@ export default function ConsultaPagosPage() {
       const pensionadoDocSnap = await getDoc(pensionadoDocRef);
 
       if (pensionadoDocSnap.exists()) {
-        let pensionadoData = { id: pensionadoDocSnap.id, ...pensionadoDocSnap.data() } as Pensionado;
-
+        let pensionadoData = { id: pensionadoDocSnap.id, ...pensionadoDocSnap.data() } as PensionadoLocal;
         console.log(`Consulta Pagos: Pensionado ID: ${pensionadoData.id}. Datos iniciales:`, JSON.stringify(pensionadoData));
 
         const pariss1DocRef = doc(db, PARISS1_COLLECTION, pensionadoData.id);
         const pariss1DocSnap = await getDoc(pariss1DocRef);
         if (pariss1DocSnap.exists()) {
-          pensionadoData = { ...pensionadoData, ...pariss1DocSnap.data() as Pariss1Data };
+          pensionadoData = { ...pensionadoData, ...pariss1DocSnap.data() as Pariss1DataLocal };
           toast({ title: "Información Adicional", description: "Detalles de Pariss1 cargados.", variant: "default" });
           console.log(`Consulta Pagos: Datos de Pariss1 para ${pensionadoData.id} cargados y fusionados.`);
         } else {
@@ -251,26 +215,23 @@ export default function ConsultaPagosPage() {
 
         const pagosCollectionRef = collection(db, PENSIONADOS_COLLECTION, pensionadoData.id, PAGOS_SUBCOLLECTION);
         console.log(`Consulta Pagos: Construida referencia a la subcolección de pagos: ${pagosCollectionRef.path}`);
-
         const pagosQuery = query(pagosCollectionRef, orderBy("año", "desc"), orderBy("fechaProcesado", "desc"));
         console.log("Consulta Pagos: Objeto Query de Pagos (configuración):", pagosQuery);
-
         const pagosSnapshot = await getDocs(pagosQuery);
         console.log(`Consulta Pagos: Snapshot de pagos recibido. Vacío: ${pagosSnapshot.empty}. Número de documentos: ${pagosSnapshot.docs.length}`);
 
-        const pagosTemp: Pago[] = [];
+        const pagosTemp: PagoLocal[] = [];
         pagosSnapshot.forEach(docSnap => {
             const data = docSnap.data();
             console.log(`Consulta Pagos: Documento de pago ID: ${docSnap.id}, Datos Brutos:`, JSON.stringify(data));
-            pagosTemp.push({ id: docSnap.id, ...data } as Pago);
+            pagosTemp.push({ id: docSnap.id, ...data } as PagoLocal);
         });
         setPagosList(pagosTemp);
         console.log(`Consulta Pagos: pagosList actualizado con ${pagosTemp.length} pagos.`);
 
-
         if (pagosTemp.length > 0) {
           const stats: PagosAnualesStats = {};
-          const groupedByYear = pagosTemp.reduce<Record<string, Pago[]>>((acc, pago) => {
+          const groupedByYear = pagosTemp.reduce<Record<string, PagoLocal[]>>((acc, pago) => {
             const yearKey = pago.año || "Sin Año";
             if (!acc[yearKey]) acc[yearKey] = [];
             acc[yearKey].push(pago);
@@ -297,11 +258,16 @@ export default function ConsultaPagosPage() {
           console.warn(`Consulta Pagos: No se encontraron pagos efectivos para ${pensionadoData.id}, 'pagosList' está vacío.`);
           setPagosAnualesStats({});
         }
+        
+        // Actualizar contexto
+        setContextPensionadoData(pensionadoData as Pensionado, pagosTemp as Pago[]);
+
 
       } else {
         setError("No se encontró el pensionado para ver detalles.");
         toast({ title: "No encontrado", description: "Error al cargar detalles del pensionado.", variant: "destructive" });
         setViewMode('list');
+        clearContextPensionadoData();
         console.error(`Consulta Pagos: No se encontró documento de pensionado con ID: ${pensionadoId} en la ruta ${pensionadoDocRef.path}`);
       }
     } catch (err: any) {
@@ -314,12 +280,17 @@ export default function ConsultaPagosPage() {
          toastMessage = "La consulta de pensionados por filtro requiere un índice compuesto en Firestore. Revisa la consola del navegador para crearlo.";
       }
       toast({ title: "Error", description: toastMessage, variant: "destructive" });
+      clearContextPensionadoData();
     } finally {
       setIsLoading(false);
+      setContextIsLoading(false);
     }
   };
 
   const handleSearch = () => {
+    clearContextPensionadoData(); // Limpiar contexto antes de una nueva búsqueda
+    setContextIsLoading(true);
+
     setSelectedPensionado(null);
     setPagosList([]);
     setPagosAnualesStats({});
@@ -336,6 +307,7 @@ export default function ConsultaPagosPage() {
     } else {
       toast({ title: "Información requerida", description: "Ingrese un número de documento o seleccione filtros.", variant: "destructive" });
       setViewMode('initial');
+      setContextIsLoading(false);
     }
   };
 
@@ -356,13 +328,20 @@ export default function ConsultaPagosPage() {
     try {
       if (typeof timestamp === 'string') {
         const d = new Date(timestamp);
-        if (isNaN(d.getTime())) return 'N/A'; // Return N/A for invalid date strings
+        if (isNaN(d.getTime())) return 'N/A'; 
         return d.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
       }
-      return timestamp.toDate().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+       if (timestamp instanceof Timestamp) {
+         return timestamp.toDate().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+       }
+       // Si es un objeto pero no Timestamp (podría ser de contexto serializado)
+       if (typeof timestamp === 'object' && timestamp.hasOwnProperty('seconds')) {
+        return new Date((timestamp as any).seconds * 1000).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+       }
+      return 'N/A';
     } catch (e) {
       console.warn("Could not format timestamp:", timestamp, e);
-      return 'N/A'; // Return N/A if conversion fails
+      return 'N/A';
     }
   };
 
@@ -378,14 +357,14 @@ export default function ConsultaPagosPage() {
     if (sexoCode === undefined) return 'N/A';
     if (sexoCode === 1) return 'Masculino';
     if (sexoCode === 2) return 'Femenino';
-    return 'N/A'; // Return N/A for other codes or if undefined
+    return 'N/A';
   };
 
   const formatRegimen = (regimenCode?: number): string => {
     if (regimenCode === undefined) return 'N/A';
     if (regimenCode === 1) return 'Régimen A';
     if (regimenCode === 2) return 'Régimen B (Transición)';
-    return `Código ${regimenCode}`; // Keep original if not 1 or 2, but should ideally be N/A if unknown
+    return `Código ${regimenCode}`; 
   };
 
   const formatRiesgo = (riesgoCode?: string): string => {
@@ -393,9 +372,9 @@ export default function ConsultaPagosPage() {
     if (riesgoCode === 'V') return 'Vejez';
     if (riesgoCode === 'I') return 'Invalidez';
     if (riesgoCode === 'S') return 'Sobrevivencia';
-    return riesgoCode; // Keep original if not V, I, S, but should ideally be N/A if unknown
+    return riesgoCode; 
   };
-
+  
   const formatTranci = (tranciValue?: boolean): string => {
     if (tranciValue === undefined) return 'N/A';
     return tranciValue ? 'Sí' : 'No';
@@ -403,6 +382,7 @@ export default function ConsultaPagosPage() {
 
 
   const handleClearFiltersAndSearch = () => {
+    clearContextPensionadoData();
     setDocumentoInput("");
     setFilterCentroCosto(undefined);
     setFilterDependencia(undefined);
@@ -508,7 +488,7 @@ export default function ConsultaPagosPage() {
                       <TableCell>{p.pnlDependencia?.replace(/^V\d+-/, '') || 'N/A'}</TableCell>
                       <TableCell>
                         <Button variant="outline" size="sm" onClick={() => fetchPensionadoDetails(p.id)} disabled={isLoading}>
-                          Ver Detalles
+                          Ver Resumen
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -624,6 +604,13 @@ export default function ConsultaPagosPage() {
                   );
                 })}
               </CardContent>
+              <CardFooter className="pt-4 flex justify-end">
+                <Button asChild variant="default">
+                  <Link href="/dashboard/pagos">
+                    Ver Comprobantes de Pago <ChevronsRight className="ml-2 h-5 w-5" />
+                  </Link>
+                </Button>
+              </CardFooter>
             </Card>
           )}
 
@@ -655,5 +642,3 @@ export default function ConsultaPagosPage() {
     </div>
   );
 }
-
-    
