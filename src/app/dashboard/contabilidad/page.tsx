@@ -40,10 +40,10 @@ const DefaultContabilidadView = () => (
         <CardHeader>
             <CardTitle className="flex items-center text-2xl font-headline text-primary">
                 <LayoutGrid className="mr-3 h-7 w-7" />
-                Módulo de Contabilidad
+                Bienvenido a Contabilidad
             </CardTitle>
             <CardDescription>
-                Bienvenido al módulo de contabilidad. Seleccione una opción de la barra de navegación superior para comenzar.
+                Seleccione una opción de la barra de navegación superior para comenzar.
             </CardDescription>
         </CardHeader>
         <CardContent>
@@ -51,7 +51,7 @@ const DefaultContabilidadView = () => (
                 Este módulo le permite gestionar clientes, pagos, ver historiales financieros y más.
             </p>
             <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {submenuItems.filter(item => item.id !== 'agregar-pago').slice(0,3).map(item => (
+                {submenuItems.filter(item => item.id !== 'agregar-pago' && !item.isPrimaryAction).slice(0,3).map(item => (
                      <Link key={item.id} href={`/dashboard/contabilidad?view=${item.id}`}>
                         <Button asChild variant="outline" className="w-full justify-start text-left h-auto py-3 shadow-sm hover:shadow-md transition-shadow">
                             <span>
