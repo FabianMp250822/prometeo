@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useSearchParams } from 'next/navigation'; 
+import { useSearchParams, usePathname } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { BookText, UserPlus, CreditCard, History, PlusCircle, UserCog, LineChart, FileText, LayoutGrid } from 'lucide-react';
@@ -36,7 +36,7 @@ const submenuItems: SubmenuItem[] = [
 ];
 
 const DefaultContabilidadView = () => (
-    <Card> {/* Removed mt-6, spacing primarily handled by parent section's relation to sticky nav */}
+    <Card>
         <CardHeader>
             <CardTitle className="flex items-center text-2xl font-headline text-primary">
                 <LayoutGrid className="mr-3 h-7 w-7" />
@@ -72,23 +72,24 @@ const DefaultContabilidadView = () => (
 
 export default function ContabilidadPage() {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const currentView = searchParams.get('view');
 
   const ActiveComponent = submenuItems.find(item => item.id === currentView)?.component || DefaultContabilidadView;
 
   return (
-    <div> {/* Removed space-y-6 to manage spacing directly */}
-      <Card className="shadow-md sticky top-[7.5rem] z-10 bg-card/95 backdrop-blur-sm mb-6"> {/* Added mb-6 */}
-        <CardHeader className="pb-3 pt-4 px-4">
+    <div>
+      <Card className="shadow-md sticky top-[7.5rem] z-10 bg-card/95 backdrop-blur-sm mb-4"> {/* Reduced mb-6 to mb-4 */}
+        <CardHeader className="pb-2 pt-3 px-4"> {/* Reduced pb-3 to pb-2, pt-4 to pt-3 */}
           <CardTitle className="flex items-center text-xl font-headline text-primary">
             <BookText className="mr-3 h-6 w-6" />
             Contabilidad
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <nav className="flex flex-wrap items-center gap-1 border-t border-b px-3 py-2">
+          <nav className="flex flex-wrap items-center gap-1 border-t border-b px-3 py-2"> {/* py-2 ensures some space for buttons */}
             {submenuItems.map((item) => (
-              <Link key={item.id} href={`/dashboard/contabilidad?view=${item.id}`}>
+              <Link key={item.id} href={`${pathname}?view=${item.id}`}>
                 <Button
                   asChild
                   variant={item.isPrimaryAction ? 'default' : (currentView === item.id ? 'secondary' : 'ghost')}
@@ -107,11 +108,9 @@ export default function ContabilidadPage() {
         </CardContent>
       </Card>
 
-      <section className="min-w-0"> {/* Container for the active submodule view */}
+      <section className="min-w-0">
         <ActiveComponent />
       </section>
     </div>
   );
 }
-
-    
