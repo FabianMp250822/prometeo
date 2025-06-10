@@ -95,7 +95,7 @@ interface PagosAnualesStats {
 
 
 const PENSIONADOS_COLLECTION = "pensionados";
-const PARISS1_COLLECTION = "pariss1"; // Confirmado: todo en minúsculas
+const PARISS1_COLLECTION = "pariss1"; 
 const PAGOS_SUBCOLLECTION = "pagos";
 const ITEMS_PER_PAGE = 10;
 
@@ -236,8 +236,7 @@ export default function ConsultaPagosPage() {
 
         console.log(`Consulta Pagos: Pensionado ID: ${pensionadoData.id}. Datos iniciales:`, JSON.stringify(pensionadoData));
 
-        // Obtener datos de PARISS1_COLLECTION
-        const pariss1DocRef = doc(db, PARISS1_COLLECTION, pensionadoData.id); // Usa el ID del pensionado
+        const pariss1DocRef = doc(db, PARISS1_COLLECTION, pensionadoData.id); 
         const pariss1DocSnap = await getDoc(pariss1DocRef);
         if (pariss1DocSnap.exists()) {
           pensionadoData = { ...pensionadoData, ...pariss1DocSnap.data() as Pariss1Data };
@@ -356,9 +355,8 @@ export default function ConsultaPagosPage() {
     if (!timestamp) return 'N/A';
     try {
       if (typeof timestamp === 'string') { 
-        // Attempt to parse common string formats if necessary, or assume it's already formatted if from Firestore directly as string
         const d = new Date(timestamp);
-        if (isNaN(d.getTime())) return timestamp; // If parsing fails, return original string
+        if (isNaN(d.getTime())) return timestamp; 
         return d.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
       }
       return timestamp.toDate().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -396,6 +394,11 @@ export default function ConsultaPagosPage() {
     if (riesgoCode === 'I') return 'Invalidez';
     if (riesgoCode === 'S') return 'Sobrevivencia';
     return riesgoCode;
+  };
+
+  const formatTranci = (tranciValue?: boolean): string => {
+    if (tranciValue === undefined) return 'N/A';
+    return tranciValue ? 'Sí' : 'No';
   };
 
 
@@ -559,15 +562,28 @@ export default function ConsultaPagosPage() {
                   <div><strong>Fondo Salud:</strong> {selectedPensionado.fondoSalud || 'N/A'}</div>
                   
                   {/* Pariss1 Data */}
+                  <div><strong>Cédula (Pariss1):</strong> {selectedPensionado.cedula || 'N/A'}</div>
                   <div><strong>Fecha Nacimiento:</strong> {formatFirebaseTimestamp(selectedPensionado.fe_nacido)}</div>
-                  <div><strong>Ciudad ISS:</strong> {selectedPensionado.ciudad_iss || 'N/A'}</div>
-                  <div><strong>Semanas Cotizadas:</strong> {selectedPensionado.semanas !== undefined ? selectedPensionado.semanas : 'N/A'}</div>
                   <div><strong>Sexo:</strong> {formatSexo(selectedPensionado.sexo)}</div>
+                  <div><strong>Ciudad ISS:</strong> {selectedPensionado.ciudad_iss || 'N/A'}</div>
+                  <div><strong>Dirección ISS:</strong> {selectedPensionado.dir_iss || 'N/A'}</div>
+                  <div><strong>Teléfono ISS:</strong> {selectedPensionado.telefono_iss !== undefined ? selectedPensionado.telefono_iss : 'N/A'}</div>
+                  <div><strong>Afilia:</strong> {selectedPensionado.afilia || 'N/A'}</div>
+                  <div><strong>Semanas Cotizadas:</strong> {selectedPensionado.semanas !== undefined ? selectedPensionado.semanas : 'N/A'}</div>
                   <div><strong>Régimen:</strong> {formatRegimen(selectedPensionado.regimen)}</div>
                   <div><strong>Tipo Riesgo:</strong> {formatRiesgo(selectedPensionado.riesgo)}</div>
+                  <div><strong>Transición:</strong> {formatTranci(selectedPensionado.tranci)}</div>
                   <div><strong>Fecha Adquiere Derecho:</strong> {formatFirebaseTimestamp(selectedPensionado.fe_adquiere)}</div>
                   <div><strong>Fecha Causación:</strong> {formatFirebaseTimestamp(selectedPensionado.fe_causa)}</div>
                   <div><strong>Fecha Ingreso ISS:</strong> {formatFirebaseTimestamp(selectedPensionado.fe_ingreso)}</div>
+                  <div><strong>Fecha Vinculación ISS:</strong> {formatFirebaseTimestamp(selectedPensionado.fe_vinculado)}</div>
+                  <div><strong>Fecha Comparte:</strong> {formatFirebaseTimestamp(selectedPensionado.Comparte)}</div>
+                  <div><strong>Resolución Año:</strong> {selectedPensionado.res_ano !== undefined ? selectedPensionado.res_ano : 'N/A'}</div>
+                  <div><strong>Resolución Número:</strong> {selectedPensionado.res_nro || 'N/A'}</div>
+                  <div><strong>Identificador Pariss1:</strong> {selectedPensionado.identifica !== undefined ? selectedPensionado.identifica : 'N/A'}</div>
+                  <div><strong>Mesada (Pariss1):</strong> {formatCurrency(selectedPensionado.mesada)}</div>
+                  <div><strong>Pensión Inicial (Pariss1):</strong> {formatCurrency(selectedPensionado.pension_ini)}</div>
+                  <div><strong>Seguro:</strong> {selectedPensionado.seguro !== undefined ? selectedPensionado.seguro : 'N/A'}</div>
               </div>
             </CardContent>
           </Card>
