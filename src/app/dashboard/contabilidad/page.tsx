@@ -79,15 +79,15 @@ export default function ContabilidadPage() {
 
   return (
     <div>
-      <Card className="shadow-md sticky top-[7.5rem] z-10 bg-card/95 backdrop-blur-sm mb-4"> {/* Reduced mb-6 to mb-4 */}
-        <CardHeader className="pb-2 pt-3 px-4"> {/* Reduced pb-3 to pb-2, pt-4 to pt-3 */}
+      <Card className="shadow-md sticky top-[7.5rem] z-10 bg-card/95 backdrop-blur-sm mb-4 -mt-4 sm:-mt-6 md:-mt-8">
+        <CardHeader className="pb-2 pt-3 px-4">
           <CardTitle className="flex items-center text-xl font-headline text-primary">
             <BookText className="mr-3 h-6 w-6" />
             Contabilidad
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <nav className="flex flex-wrap items-center gap-1 border-t border-b px-3 py-2"> {/* py-2 ensures some space for buttons */}
+          <nav className="flex flex-wrap items-center gap-1 border-t border-b px-3 py-2">
             {submenuItems.map((item) => (
               <Link key={item.id} href={`${pathname}?view=${item.id}`}>
                 <Button
