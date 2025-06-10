@@ -61,6 +61,7 @@ export default function CrearClienteView() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [isVerifyingCedula, setIsVerifyingCedula] = useState<boolean>(false);
   const [calculatedCuotaMensual, setCalculatedCuotaMensual] = useState<string>('$0.00');
+  const [verifiedCedulaForSubmit, setVerifiedCedulaForSubmit] = useState<string | null>(null);
 
   const { register, handleSubmit, control, watch, setValue, getValues, reset, formState: { errors, isSubmitting } } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -87,6 +88,11 @@ export default function CrearClienteView() {
   const plazoEnMesesWatched = watch("plazoEnMeses");
   const aporteCostosOperativosWatched = watch("aporteCostosOperativos");
   const multiplicadorSalarioMinimoWatched = watch("multiplicadorSalarioMinimo");
+  const cedulaWatched = watch("cedula");
+
+  useEffect(() => {
+    setVerifiedCedulaForSubmit(null);
+  }, [cedulaWatched]);
 
   useEffect(() => {
     if (selectedGrupo === NUEVO_GRUPO_VALUE) {
@@ -128,14 +134,16 @@ export default function CrearClienteView() {
 
 
   const handleVerificarCedula = async () => {
-    const cedula = getValues("cedula");
-    if (!cedula || cedula.trim().length < 5) {
+    const cedulaToVerify = getValues("cedula");
+    if (!cedulaToVerify || cedulaToVerify.trim().length < 5) {
       toast({ title: "Cédula Inválida", description: "Por favor, ingrese una cédula válida para verificar.", variant: "destructive" });
+      setVerifiedCedulaForSubmit(null);
       return;
     }
     setIsVerifyingCedula(true);
+    setVerifiedCedulaForSubmit(null); 
     try {
-      const pensionadoDocRef = doc(db, "pensionados", cedula.trim());
+      const pensionadoDocRef = doc(db, "pensionados", cedulaToVerify.trim());
       const docSnap = await getDoc(pensionadoDocRef);
 
       if (docSnap.exists()) {
@@ -151,17 +159,17 @@ export default function CrearClienteView() {
           const nameParts = namePart.split(" ").filter(part => part.length > 0);
           
           if (nameParts.length > 0) {
-            extractedNombres = nameParts[nameParts.length - 1]; 
-            if (nameParts.length > 1) {
-              extractedApellidos = nameParts.slice(0, nameParts.length - 1).join(" ");
+            // Assume the last part is the name(s), rest are apellidos
+            extractedNombres = nameParts.pop() || ""; // Take the last element as nombre(s)
+            if (nameParts.length > 0) {
+                extractedApellidos = nameParts.join(" "); // Join remaining as apellidos
             } else {
-              extractedApellidos = ""; 
+                 // If only one word was before (C.C.), it's considered nombre, apellido is empty
+                extractedApellidos = "";
             }
           }
         } else if (empleadoFullName) {
-            // Fallback si no hay (C.C.) pero sí data.empleado
-            // Y no hay data.nombres o data.apellidos explícitos
-            if (!(data.nombres || data.apellidos)) {
+             if (!(data.nombres || data.apellidos)) {
                 const namePartsFallback = empleadoFullName.trim().split(" ").filter(part => part.length > 0);
                 if (namePartsFallback.length > 0) {
                     extractedNombres = namePartsFallback.pop() || "";
@@ -179,12 +187,15 @@ export default function CrearClienteView() {
         setValue("telefonoFijo", data.telefonoFijo || "");
         setValue("celular", data.celular || "");
         
+        setVerifiedCedulaForSubmit(cedulaToVerify.trim());
         toast({ title: "Pensionado Encontrado", description: "Datos del pensionado cargados. Puede editarlos si es necesario.", variant: "default" });
       } else {
+        setVerifiedCedulaForSubmit(null);
         toast({ title: "Pensionado No Encontrado", description: "Puede continuar para registrar un nuevo cliente con esta cédula.", variant: "default" });
       }
     } catch (error) {
       console.error("Error verificando cédula:", error);
+      setVerifiedCedulaForSubmit(null);
       toast({ title: "Error de Verificación", description: "No se pudo verificar la cédula.", variant: "destructive" });
     } finally {
       setIsVerifyingCedula(false);
@@ -230,12 +241,13 @@ export default function CrearClienteView() {
     const salarioNum = Number(data.salarioACancelar);
     const plazoNum = Number(data.plazoEnMeses);
     const cuotaMensualNum = parseFloat(calculatedCuotaMensual.replace(/[$.]/g, '').replace(',', '.')) || 0;
+    const currentCedulaTrimmed = data.cedula.trim();
 
-    const pensionadoDataToSave = {
+    const pensionadoDataToSave: any = {
       nombres: data.nombres.trim(),
       apellidos: data.apellidos.trim(),
-      cedula: data.cedula.trim(), 
-      empleado: `${data.apellidos.trim()} ${data.nombres.trim()} (C.C. ${data.cedula.trim()})`,
+      cedula: currentCedulaTrimmed, 
+      empleado: `${data.apellidos.trim()} ${data.nombres.trim()} (C.C. ${currentCedulaTrimmed})`,
       direccion: data.direccion.trim(),
       email: data.email?.trim() || null,
       telefonoFijo: data.telefonoFijo?.trim() || null,
@@ -249,6 +261,11 @@ export default function CrearClienteView() {
       fechaUltimaActualizacion: Timestamp.now(),
     };
 
+    // Add origenRegistro if it's a new client or cedula changed after verification
+    if (verifiedCedulaForSubmit === null || verifiedCedulaForSubmit !== currentCedulaTrimmed) {
+      pensionadoDataToSave.origenRegistro = "INSCRIPCION_CLIENTE";
+    }
+
     const procesoPagoData = {
       aporteCostosOperativos: aporteNum,
       grupoCliente: grupoFinal,
@@ -259,15 +276,15 @@ export default function CrearClienteView() {
       convenioPagoUrl: convenioPagoUrl,
       fechaCreacionProceso: Timestamp.now(),
       estadoProceso: 'Pendiente', 
-      cedulaCliente: data.cedula.trim(), 
+      cedulaCliente: currentCedulaTrimmed, 
       nombreCliente: `${data.nombres.trim()} ${data.apellidos.trim()}`,
     };
 
     try {
-      const pensionadoDocRef = doc(db, "pensionados", data.cedula.trim());
+      const pensionadoDocRef = doc(db, "pensionados", currentCedulaTrimmed);
       await setDoc(pensionadoDocRef, pensionadoDataToSave, { merge: true });
 
-      const pagosProcesosColRef = collection(db, "pensionados", data.cedula.trim(), "pagos_procesos");
+      const pagosProcesosColRef = collection(db, "pensionados", currentCedulaTrimmed, "pagos_procesos");
       await addDoc(pagosProcesosColRef, procesoPagoData);
 
       toast({
@@ -277,6 +294,8 @@ export default function CrearClienteView() {
       reset(); 
       setFileName(null);
       setCalculatedCuotaMensual('$0.00');
+      setVerifiedCedulaForSubmit(null);
+
 
     } catch (error) {
       console.error('Error registrando cliente:', error);
@@ -462,6 +481,8 @@ export default function CrearClienteView() {
     </Card>
   );
 }
+    
+
     
 
     
