@@ -52,7 +52,7 @@ const DefaultContabilidadView = () => (
             </p>
             <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {submenuItems.filter(item => item.id !== 'agregar-pago' && !item.isPrimaryAction).slice(0,3).map(item => (
-                     <Link key={item.id} href={`/dashboard/contabilidad?view=${item.id}`}>
+                     <Link key={item.id} href={`/dashboard/contabilidad?view=${item.id}`} passHref>
                         <Button asChild variant="outline" className="w-full justify-start text-left h-auto py-3 shadow-sm hover:shadow-md transition-shadow">
                             <span>
                                 <item.icon className="mr-3 h-5 w-5 flex-shrink-0 text-primary" />
@@ -79,7 +79,7 @@ export default function ContabilidadPage() {
 
   return (
     <div>
-      <Card className="shadow-md sticky top-[7.5rem] z-10 bg-card/95 backdrop-blur-sm mb-4 -mt-4 sm:-mt-6 md:-mt-8">
+      <Card className="shadow-md sticky top-[7.5rem] z-10 bg-card/95 backdrop-blur-sm -mt-4 sm:-mt-6 md:-mt-8 mb-2">
         <CardHeader className="pb-2 pt-3 px-4">
           <CardTitle className="flex items-center text-xl font-headline text-primary">
             <BookText className="mr-3 h-6 w-6" />
