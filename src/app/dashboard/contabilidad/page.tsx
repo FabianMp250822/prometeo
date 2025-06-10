@@ -15,7 +15,10 @@ import {
   UserCog, 
   LineChart, 
   FileText,
-  ChevronRight
+  ChevronRight,
+  Settings,
+  FileSearch,
+  Receipt
 } from 'lucide-react';
 
 // Importar los componentes de las vistas de los submódulos
@@ -34,15 +37,20 @@ interface SubmenuItem {
   isPrimaryAction?: boolean;
 }
 
+// Actualizando para que coincida con la imagen proporcionada
 const submenuItems: SubmenuItem[] = [
-  { id: 'crear-cliente', label: 'Crear Nuevo Cliente', icon: UserPlus, isPrimaryAction: true },
-  { id: 'ver-pagos-cliente', label: 'Ver Pagos de Cliente', icon: CreditCard },
-  { id: 'historial-pagos', label: 'Ver Historial de Pagos', icon: History },
-  { id: 'agregar-pago', label: 'Agregar Pago', icon: PlusCircle, isPrimaryAction: false }, // Ajustado para que solo uno sea primario inicialmente
+  { id: 'crear-cliente', label: 'Crear Cliente', icon: UserPlus },
+  { id: 'ver-pagos-cliente', label: 'Ver Pagos Cliente', icon: CreditCard },
+  { id: 'historial-pagos', label: 'Historial de Pagos', icon: History },
+  { id: 'agregar-pago', label: 'Agregar Pago', icon: PlusCircle, isPrimaryAction: true },
   { id: 'editar-usuario', label: 'Editar Usuario', icon: UserCog },
   { id: 'resumen-financiero', label: 'Resumen Financiero', icon: LineChart },
-  { id: 'documentos-soporte', label: 'Documentos Soporte', icon: FileText },
+  { id: 'documentos-soporte', label: 'Docs. Soporte', icon: FileText },
+  { id: 'configuracion', label: 'Configuración', icon: Settings },
+  { id: 'buscar-factura', label: 'Buscar Factura', icon: FileSearch },
+  { id: 'estado-cuenta', label: 'Estado de Cuenta', icon: Receipt },
 ];
+
 
 // Vista por defecto para la página de Contabilidad
 const DefaultContabilidadView = () => (
@@ -52,13 +60,13 @@ const DefaultContabilidadView = () => (
         <BookText className="mx-auto h-20 w-20 mb-4 text-primary/20" />
         <p className="text-xl font-semibold text-foreground">Módulo de Contabilidad</p>
         <p className="text-md mt-2">
-          Seleccione una opción del submenú superior para administrar clientes, pagos y más.
+          Seleccione una opción del submenú superior para comenzar.
         </p>
         <div className="mt-8 flex justify-center">
-          <Link href="/dashboard/contabilidad?view=crear-cliente">
+          <Link href="/dashboard/contabilidad?view=agregar-pago">
             <Button size="lg">
-              <UserPlus className="mr-2 h-5 w-5" />
-              Comenzar creando un cliente
+              <PlusCircle className="mr-2 h-5 w-5" />
+              Comenzar agregando un pago
             </Button>
           </Link>
         </div>
@@ -66,6 +74,7 @@ const DefaultContabilidadView = () => (
     </CardContent>
   </Card>
 );
+
 
 // Mapeo de IDs de vista a componentes
 const componentMap: Record<string, React.ElementType> = {
@@ -76,6 +85,10 @@ const componentMap: Record<string, React.ElementType> = {
   'editar-usuario': EditarUsuarioContableView,
   'resumen-financiero': ResumenFinancieroView,
   'documentos-soporte': DocumentosSoporteView,
+  // Añadir placeholders para los nuevos botones si se crean los componentes
+  'configuracion': () => <Card><CardContent className="pt-6"><p>Vista de Configuración (Contabilidad)</p></CardContent></Card>,
+  'buscar-factura': () => <Card><CardContent className="pt-6"><p>Vista de Buscar Factura</p></CardContent></Card>,
+  'estado-cuenta': () => <Card><CardContent className="pt-6"><p>Vista de Estado de Cuenta</p></CardContent></Card>,
   'default': DefaultContabilidadView,
 };
 
@@ -88,7 +101,7 @@ export default function ContabilidadPage() {
 
   return (
     <>
-      <Card className="sticky top-[7.5rem] z-10 shadow-md -mt-0 bg-card/90 backdrop-blur-sm mb-0 rounded-t-lg rounded-b-none border-b-0">
+      <Card className="sticky top-0 z-10 mt-0 shadow-md bg-card rounded-lg">
         <CardHeader className="pb-2 pt-3 px-4">
           <CardTitle className="flex items-center text-xl font-headline text-primary">
             <BookText className="mr-3 h-6 w-6" />
@@ -117,7 +130,7 @@ export default function ContabilidadPage() {
         </CardContent>
       </Card>
       
-      <section className="pt-4"> {/* Contenedor para el componente activo */}
+      <section className="pt-4">
         <ActiveComponent />
       </section>
     </>
