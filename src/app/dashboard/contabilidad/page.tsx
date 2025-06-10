@@ -78,7 +78,7 @@ export default function ContabilidadPage() {
   const ActiveComponent = submenuItems.find(item => item.id === currentView)?.component || DefaultContabilidadView;
 
   return (
-    <div>
+    <>
       <Card className="shadow-md sticky top-[7.5rem] z-10 bg-card/95 backdrop-blur-sm mt-0">
         <CardHeader className="pb-2 pt-3 px-4">
           <CardTitle className="flex items-center text-xl font-headline text-primary">
@@ -111,6 +111,6 @@ export default function ContabilidadPage() {
       <section className="min-w-0 pt-4">
         <ActiveComponent />
       </section>
-    </div>
+    </>
   );
 }
