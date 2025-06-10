@@ -78,7 +78,7 @@ export default function ContabilidadPage() {
 
   return (
     <div className="space-y-6">
-      <Card className="shadow-md sticky top-[calc(theme(spacing.16)_+_theme(spacing.14))] md:top-[calc(theme(spacing.16)_+_theme(spacing.14))] z-10 bg-card/95 backdrop-blur-sm">
+      <Card className="shadow-md sticky top-[7.5rem] z-10 bg-card/95 backdrop-blur-sm">
         <CardHeader className="pb-3 pt-4 px-4">
           <CardTitle className="flex items-center text-xl font-headline text-primary">
             <BookText className="mr-3 h-6 w-6" />
