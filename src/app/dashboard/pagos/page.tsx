@@ -117,85 +117,75 @@ export default function PagosDetallePage() {
     return date.getMonth() + 1; // 1-12
   }, []);
 
-  const updateFilterOptions = useCallback((pagos: Pago[], pagoToSelect?: Pago | null) => {
-    console.log("PagosDetallePage: updateFilterOptions called. Pagos count:", pagos.length, "PagoToSelect ID:", pagoToSelect?.id);
-    if (pagos.length > 0) {
-      const years = new Set<string>();
-      pagos.forEach(p => {
-        if (p.fechaProcesado) {
-          const date = (p.fechaProcesado instanceof Timestamp) ? p.fechaProcesado.toDate() : new Date((p.fechaProcesado as any).seconds * 1000);
-          years.add(date.getFullYear().toString());
-        } else if (p.año) {
-          years.add(p.año);
-        }
-      });
-      const sortedYears = Array.from(years).sort((a, b) => b.localeCompare(a));
-      setAvailableYears(sortedYears);
-      console.log("PagosDetallePage: Available years set:", sortedYears);
 
-      const targetPagoForFilters = pagoToSelect || pagos[0];
-      if (targetPagoForFilters) {
-        let targetYear = "";
-        if (targetPagoForFilters.fechaProcesado) {
-            const targetDate = (targetPagoForFilters.fechaProcesado instanceof Timestamp) ? targetPagoForFilters.fechaProcesado.toDate() : new Date((targetPagoForFilters.fechaProcesado as any).seconds * 1000);
-            targetYear = targetDate.getFullYear().toString();
-        } else if (targetPagoForFilters.año) {
-            targetYear = targetPagoForFilters.año;
-        }
-        
-        if (sortedYears.includes(targetYear)) {
-            setSelectedYearFilter(targetYear);
-            console.log("PagosDetallePage: SelectedYearFilter set by updateFilterOptions:", targetYear);
-        } else if (sortedYears.length > 0) {
-            setSelectedYearFilter(sortedYears[0]);
-            console.log("PagosDetallePage: SelectedYearFilter fallback by updateFilterOptions:", sortedYears[0]);
-        } else {
-            setSelectedYearFilter(undefined);
-             console.log("PagosDetallePage: SelectedYearFilter cleared by updateFilterOptions (no years).");
-        }
-      } else {
-        setSelectedYearFilter(undefined);
-        console.log("PagosDetallePage: SelectedYearFilter cleared (no targetPago for filters).");
-      }
-    } else {
-      setAvailableYears([]);
-      setSelectedYearFilter(undefined);
-      console.log("PagosDetallePage: Cleared all year filters (no pagos).");
-    }
-  }, [getMonthNameFromTimestamp, getMonthNumberFromTimestamp]);
-
-
+  // Effect to load data from context or handle a clean state
   useEffect(() => {
-    console.log("PagosDetallePage: Context check. isContextLoading:", isContextLoading, "ContextPensionado ID:", contextPensionado?.id);
+    console.log("PagosDetallePage: Context/Loading Effect. isContextLoading:", isContextLoading, "ContextPensionado ID:", contextPensionado?.id);
     if (!isContextLoading && contextPensionado && contextPagos) {
-      console.log("PagosDetallePage: Loading data from PensionadoContext. Pensionado ID:", contextPensionado.id, "Pagos count:", contextPagos.length);
-      setIsLoading(true); 
-      setSelectedPensionado(contextPensionado);
-      setAllPagosList(contextPagos); 
-      setDocumentoInput(contextPensionado.id);
-      setError(null);
+        setIsLoading(true);
+        setSelectedPensionado(contextPensionado);
+        setAllPagosList(contextPagos);
+        setDocumentoInput(contextPensionado.id);
+        setError(null);
 
-      if (contextPagos.length > 0) {
-        setSelectedPago(contextPagos[0]); 
-        updateFilterOptions(contextPagos, contextPagos[0]); 
-      } else {
-        setSelectedPago(null);
-        updateFilterOptions([], null); 
-        toast({ title: "Sin Pagos", description: "Este pensionado no tiene registros de pago en el contexto.", variant: "default" });
-      }
-      setIsLoading(false);
+        // Populate available years first
+        const years = new Set<string>();
+        contextPagos.forEach(p => {
+            if (p.fechaProcesado) {
+                const date = (p.fechaProcesado instanceof Timestamp) ? p.fechaProcesado.toDate() : new Date((p.fechaProcesado as any).seconds * 1000);
+                years.add(date.getFullYear().toString());
+            } else if (p.año) {
+                years.add(p.año);
+            }
+        });
+        const sortedYears = Array.from(years).sort((a, b) => b.localeCompare(a));
+        setAvailableYears(sortedYears);
+        console.log("PagosDetallePage: Available years set from context:", sortedYears);
+
+        if (contextPagos.length > 0) {
+            const lastPago = contextPagos[0]; // Assuming sorted with most recent first
+            let targetYear = "";
+            if (lastPago.fechaProcesado) {
+                const date = (lastPago.fechaProcesado instanceof Timestamp) ? lastPago.fechaProcesado.toDate() : new Date((lastPago.fechaProcesado as any).seconds * 1000);
+                targetYear = date.getFullYear().toString();
+            } else if (lastPago.año) { // Fallback if fechaProcesado is missing
+                targetYear = lastPago.año;
+            }
+
+            if (sortedYears.includes(targetYear)) {
+                setSelectedYearFilter(targetYear); // This will trigger the next useEffect for months
+                 console.log("PagosDetallePage: Initial selectedYearFilter from context's last payment:", targetYear);
+            } else if (sortedYears.length > 0) {
+                setSelectedYearFilter(sortedYears[0]); // Fallback to most recent year if lastPago's year is odd
+                 console.log("PagosDetallePage: Initial selectedYearFilter fallback from context (most recent year):", sortedYears[0]);
+            } else {
+                setSelectedYearFilter(undefined); // No years, no filter
+                console.log("PagosDetallePage: No years found in context pagos, selectedYearFilter is undefined.");
+            }
+        } else {
+            setSelectedPago(null);
+            setSelectedYearFilter(undefined); // No pagos, no year filter
+            setAvailableMonths([]);
+            setSelectedMonthFilter(undefined);
+            toast({ title: "Sin Pagos", description: "Este pensionado no tiene registros de pago en el contexto.", variant: "default" });
+        }
+        setIsLoading(false);
+
     } else if (!isContextLoading && !contextPensionado) {
-      console.log("PagosDetallePage: No data in PensionadoContext or context is clean. Clearing local state.");
-      setSelectedPensionado(null);
-      setAllPagosList([]);
-      setSelectedPago(null);
-      setDocumentoInput("");
-      updateFilterOptions([], null);
-      setError(null);
-      setIsLoading(false);
+        // Context is clean, reset local state
+        setSelectedPensionado(null);
+        setAllPagosList([]);
+        setSelectedPago(null);
+        setDocumentoInput("");
+        setAvailableYears([]);
+        setSelectedYearFilter(undefined);
+        setAvailableMonths([]);
+        setSelectedMonthFilter(undefined);
+        setError(null);
+        setIsLoading(false);
     }
-  }, [contextPensionado, contextPagos, isContextLoading, toast, updateFilterOptions, setContextIsLoading]);
-  
+  }, [contextPensionado, contextPagos, isContextLoading, toast, getMonthNameFromTimestamp, getMonthNumberFromTimestamp]);
+
 
   const fetchPensionadoYPagos = async (pensionadoId: string) => {
     if (!pensionadoId.trim()) {
@@ -203,13 +193,16 @@ export default function PagosDetallePage() {
         return;
     }
     setIsLoading(true);
-    setContextIsLoading(true); 
+    setContextIsLoading(true);
     setError(null);
+    // Clear previous data before fetching new
     setSelectedPensionado(null);
     setAllPagosList([]);
     setSelectedPago(null);
-    updateFilterOptions([], null); 
-
+    setAvailableYears([]);
+    setSelectedYearFilter(undefined);
+    setAvailableMonths([]);
+    setSelectedMonthFilter(undefined);
 
     try {
       const pensionadoDocRef = doc(db, PENSIONADOS_COLLECTION, pensionadoId);
@@ -218,7 +211,7 @@ export default function PagosDetallePage() {
       if (!pensionadoDocSnap.exists()) {
         setError("No se encontró el pensionado con el documento ingresado.");
         toast({ title: "No Encontrado", description: "Verifique el número de documento.", variant: "destructive" });
-        clearContextPensionadoData(); 
+        clearContextPensionadoData();
         return;
       }
 
@@ -239,46 +232,34 @@ export default function PagosDetallePage() {
         pagosTemp.push({ id: docSnap.id, ...docSnap.data() } as Pago);
       });
       
+      // Set context first, then local state will update via useEffect for context changes
       setContextPensionadoData(pensionadoData, pagosTemp); 
-      
-      // Local state will be updated by the context useEffect, no need to set here directly
-      // setSelectedPensionado(pensionadoData);
-      // setAllPagosList(pagosTemp);
-      // if (pagosTemp.length > 0) {
-      //   setSelectedPago(pagosTemp[0]);
-      //   updateFilterOptions(pagosTemp, pagosTemp[0]);
-      // } else {
-      //   setSelectedPago(null);
-      //   updateFilterOptions([], null);
-      // }
+      // The useEffect listening to context changes will handle setting local states like setSelectedPensionado, setAllPagosList, and initializing filters.
 
     } catch (err: any) {
       console.error("Error fetching pensioner details or payments:", err);
       setError("Ocurrió un error al cargar los datos: " + err.message);
       toast({ title: "Error", description: "No se pudo cargar la información.", variant: "destructive" });
-      clearContextPensionadoData(); 
+      clearContextPensionadoData();
     } finally {
-      setIsLoading(false); 
-      setContextIsLoading(false); 
+      setIsLoading(false);
+      setContextIsLoading(false);
     }
   };
   
   // Effect to update available months when selectedYearFilter or allPagosList changes
   useEffect(() => {
-    console.log("PagosDetallePage: Effect for availableMonths triggered. Year:", selectedYearFilter, "Pagos count:", allPagosList.length);
+    console.log("PagosDetallePage: Effect for availableMonths. Year:", selectedYearFilter, "Pagos count:", allPagosList.length);
     if (selectedYearFilter && allPagosList.length > 0) {
         const monthsForYear = new Map<number, string>(); 
         allPagosList.forEach(p => {
             let paymentYear = "";
-            let paymentMonthNum = 0;
-            let paymentMonthName = "";
-
             if (p.fechaProcesado) {
                 const date = (p.fechaProcesado instanceof Timestamp) ? p.fechaProcesado.toDate() : new Date((p.fechaProcesado as any).seconds * 1000);
                 paymentYear = date.getFullYear().toString();
                 if (paymentYear === selectedYearFilter) {
-                    paymentMonthNum = getMonthNumberFromTimestamp(p.fechaProcesado);
-                    paymentMonthName = getMonthNameFromTimestamp(p.fechaProcesado);
+                    const paymentMonthNum = getMonthNumberFromTimestamp(p.fechaProcesado);
+                    const paymentMonthName = getMonthNameFromTimestamp(p.fechaProcesado);
                     if (paymentMonthNum > 0 && !monthsForYear.has(paymentMonthNum)) {
                         monthsForYear.set(paymentMonthNum, `${paymentMonthName.charAt(0).toUpperCase() + paymentMonthName.slice(1)} (${paymentMonthNum})`);
                     }
@@ -299,37 +280,66 @@ export default function PagosDetallePage() {
         });
     } else { 
         if(availableMonths.length > 0) { 
-            console.log("PagosDetallePage: Clearing availableMonths.");
+            console.log("PagosDetallePage: Clearing availableMonths because no year selected or no pagos.");
             setAvailableMonths([]);
         }
     }
   }, [selectedYearFilter, allPagosList, getMonthNameFromTimestamp, getMonthNumberFromTimestamp, availableMonths.length]);
 
-  // Effect to auto-select/validate the month when availableMonths or selectedYearFilter changes
+
+  // Effect to auto-select/validate the month when availableMonths or selectedYearFilter changes (or initially from context)
   useEffect(() => {
-    console.log("PagosDetallePage: Effect for selectedMonthFilter validation. Year:", selectedYearFilter, "AvailableMonths:", availableMonths);
+    console.log("PagosDetallePage: Effect for selectedMonthFilter validation. Year:", selectedYearFilter, "AvailableMonths:", availableMonths.join(', '));
     if (selectedYearFilter) { 
         if (availableMonths.length > 0) {
-            const currentMonthIsValidForNewYear = selectedMonthFilter && availableMonths.includes(selectedMonthFilter);
-            if (!currentMonthIsValidForNewYear) {
-                console.log("PagosDetallePage: Setting selectedMonthFilter to first available for year", selectedYearFilter, ":", availableMonths[0]);
-                setSelectedMonthFilter(availableMonths[0]); 
-            } else {
-                console.log("PagosDetallePage: selectedMonthFilter", selectedMonthFilter, "is still valid for year", selectedYearFilter);
+            // This logic aims to set the month filter based on the LAST payment when data initially loads via context,
+            // OR set to the first available month if the year changes or current month becomes invalid.
+            let monthToSet: string | undefined = undefined;
+
+            if (contextPagos && contextPagos.length > 0 && selectedYearFilter === ((contextPagos[0].fechaProcesado instanceof Timestamp ? contextPagos[0].fechaProcesado.toDate() : new Date((contextPagos[0].fechaProcesado as any).seconds * 1000)).getFullYear().toString())) {
+                 // If it's the initial load year (year of the last payment from context), try to set the month of that last payment.
+                const lastPago = contextPagos[0];
+                const lastPagoMonthNum = getMonthNumberFromTimestamp(lastPago.fechaProcesado);
+                const lastPagoMonthName = getMonthNameFromTimestamp(lastPago.fechaProcesado);
+                if (lastPagoMonthNum > 0) {
+                    const lastPagoMonthStr = `${lastPagoMonthName.charAt(0).toUpperCase() + lastPagoMonthName.slice(1)} (${lastPagoMonthNum})`;
+                    if (availableMonths.includes(lastPagoMonthStr)) {
+                        monthToSet = lastPagoMonthStr;
+                        console.log("PagosDetallePage: Initial month (from last context pago):", monthToSet);
+                    }
+                }
             }
-        } else {
-             if (selectedMonthFilter !== undefined) { // Only clear if not already undefined
+            
+            // If monthToSet is still undefined (not initial load, or last pago's month not found),
+            // or if current selectedMonthFilter is invalid, pick the first available.
+            if (!monthToSet) {
+                const currentMonthIsValidForYear = selectedMonthFilter && availableMonths.includes(selectedMonthFilter);
+                if (!currentMonthIsValidForYear) {
+                    monthToSet = availableMonths[0];
+                    console.log("PagosDetallePage: Setting selectedMonthFilter to first available for year", selectedYearFilter, ":", monthToSet);
+                } else {
+                    monthToSet = selectedMonthFilter; // Keep current valid selection
+                     console.log("PagosDetallePage: selectedMonthFilter", selectedMonthFilter, "is still valid for year", selectedYearFilter);
+                }
+            }
+            
+            if (selectedMonthFilter !== monthToSet) { // Only update if different
+                setSelectedMonthFilter(monthToSet);
+            }
+
+        } else { // No available months for this year
+             if (selectedMonthFilter !== undefined) {
                 console.log("PagosDetallePage: Clearing selectedMonthFilter (no available months for year", selectedYearFilter, ")");
                 setSelectedMonthFilter(undefined);
              }
         }
-    } else {
-        if (selectedMonthFilter !== undefined) { // Only clear if not already undefined
+    } else { // No year selected
+        if (selectedMonthFilter !== undefined) {
             console.log("PagosDetallePage: Clearing selectedMonthFilter (no year selected).");
             setSelectedMonthFilter(undefined);
         }
     }
-  }, [selectedYearFilter, availableMonths]); // Removed selectedMonthFilter from deps
+  }, [selectedYearFilter, availableMonths, contextPagos, getMonthNameFromTimestamp, getMonthNumberFromTimestamp]); // Removed selectedMonthFilter from deps to avoid loop with its own setter, rely on availableMonths & year
 
 
   // Effect to update the selectedPago when filters change
@@ -338,7 +348,7 @@ export default function PagosDetallePage() {
     if (selectedYearFilter && selectedMonthFilter && allPagosList.length > 0) {
         const monthNumberToFind = parseInt(selectedMonthFilter.match(/\((\d+)\)/)?.[1] || "0");
         if (monthNumberToFind === 0) {
-            setSelectedPago(null);
+            if (selectedPago !== null) setSelectedPago(null); // Clear if parsing fails
             return;
         }
 
@@ -353,15 +363,19 @@ export default function PagosDetallePage() {
         });
         
         console.log("PagosDetallePage: Pago encontrado para", selectedYearFilter, "/", monthNumberToFind, ":", pagoEncontrado?.id);
-        setSelectedPago(pagoEncontrado || null);
+        // Only update if the found payment is different from the current selected one
+        if (selectedPago?.id !== pagoEncontrado?.id) {
+            setSelectedPago(pagoEncontrado || null);
+        }
 
         if (!pagoEncontrado && !isContextLoading && !isLoading) { 
             toast({ title: "Sin Pago", description: `No se encontró un pago para ${selectedMonthFilter.split(' (')[0]} de ${selectedYearFilter}.`, variant: "default" });
         }
-    } else if (allPagosList.length === 0) { 
-        setSelectedPago(null);
+    } else if (allPagosList.length === 0 || !selectedYearFilter || !selectedMonthFilter) { 
+        // If filters are cleared or no pagos, clear selectedPago
+        if (selectedPago !== null) setSelectedPago(null);
     }
-  }, [selectedYearFilter, selectedMonthFilter, allPagosList, toast, isContextLoading, isLoading]);
+  }, [selectedYearFilter, selectedMonthFilter, allPagosList, toast, isContextLoading, isLoading, selectedPago]);
 
 
   const handleSearch = () => {
@@ -378,11 +392,11 @@ export default function PagosDetallePage() {
     return selectedPago.detalles.reduce((sum, item) => sum + (item.egresos || 0), 0);
   }, [selectedPago]);
 
-  if ((isContextLoading && !contextPensionado) || (isLoading && !selectedPensionado)) {
+  if ((isContextLoading && !contextPensionado) || (isLoading && !selectedPensionado && !error)) { // Show loading if context is loading and no data, or local loading and no data/error
      return (
       <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
         <Loader2 className="mr-2 h-8 w-8 animate-spin text-primary" />
-        <p className="text-lg text-muted-foreground">Cargando datos del pensionado...</p>
+        <p className="text-lg text-muted-foreground">Cargando datos...</p>
       </div>
     );
   }
@@ -420,7 +434,7 @@ export default function PagosDetallePage() {
         </CardContent>
       </Card>
 
-      {selectedPensionado && selectedPago && !isLoading && !isContextLoading && (
+      {selectedPensionado && !isLoading && !isContextLoading && ( // Show content if pensionado is selected and not loading
         <Card className="shadow-xl overflow-hidden">
           <CardHeader className="bg-muted/30 p-4 sm:p-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
@@ -434,13 +448,13 @@ export default function PagosDetallePage() {
                 </div>
                 <div className="flex gap-2 mt-2 sm:mt-0 items-center">
                     <Label className="text-sm hidden sm:inline">Filtrar por:</Label>
-                    <Select value={selectedYearFilter} onValueChange={setSelectedYearFilter} disabled={availableYears.length === 0 || isLoading || isContextLoading}>
+                    <Select value={selectedYearFilter || ""} onValueChange={setSelectedYearFilter} disabled={availableYears.length === 0 || isLoading || isContextLoading}>
                         <SelectTrigger className="w-full sm:w-[120px] text-sm"><SelectValue placeholder="Año" /></SelectTrigger>
                         <SelectContent>
                             {availableYears.map(year => <SelectItem key={year} value={year}>{year}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                     <Select value={selectedMonthFilter} onValueChange={setSelectedMonthFilter} disabled={availableMonths.length === 0 || isLoading || isContextLoading}>
+                     <Select value={selectedMonthFilter || ""} onValueChange={setSelectedMonthFilter} disabled={availableMonths.length === 0 || isLoading || isContextLoading}>
                         <SelectTrigger className="w-full sm:w-[180px] text-sm"><SelectValue placeholder="Mes" /></SelectTrigger>
                         <SelectContent>
                             {availableMonths.map(monthStr => <SelectItem key={monthStr} value={monthStr}>{monthStr.split(' (')[0]}</SelectItem>)}
@@ -450,78 +464,92 @@ export default function PagosDetallePage() {
             </div>
           </CardHeader>
           
-          <CardContent className="p-4 sm:p-6 space-y-4 text-sm">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-2 border-b pb-4">
-              <div><strong>Nombre:</strong> {selectedPensionado.empleado || 'N/A'}</div>
-              <div><strong>Documento:</strong> {selectedPensionado.id}</div>
-              <div><strong>Básico Pensionado:</strong> {formatCurrency(selectedPensionado.basico)}</div>
-              <div><strong>Cargo:</strong> {selectedPensionado.cargo || 'N/A'}</div>
-              
-              <div><strong>Centro Costo:</strong> {selectedPensionado.pnlCentroCosto || 'N/A'}</div>
-              <div><strong>Dependencia:</strong> {selectedPensionado.pnlDependencia?.replace(/^V\d+-/, '') || 'N/A'}</div>
-              <div><strong>Esquema:</strong> {selectedPensionado.esquema || 'N/A'}</div>
-              <div><strong>Grado:</strong> {selectedPago.grado || selectedPensionado.grado || 'N/A'}</div>
-              
-              <Separator className="col-span-full my-1" />
-              
-              <div className="font-semibold text-primary"><strong>Periodo del Pago:</strong> {selectedPago.periodoPago || 'N/A'}</div>
-              <div className="font-semibold text-primary"><strong>Fecha Liquidación:</strong> {formatFirebaseTimestamp(selectedPago.fechaLiquidacion || selectedPago.fechaProcesado)}</div>
-              <div className="font-semibold text-primary col-span-2"><strong>Fecha Procesado:</strong> {formatFirebaseTimestamp(selectedPago.fechaProcesado, { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
-            </div>
+          {selectedPago ? (
+            <>
+              <CardContent className="p-4 sm:p-6 space-y-4 text-sm">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-2 border-b pb-4">
+                  <div><strong>Nombre:</strong> {selectedPensionado.empleado || 'N/A'}</div>
+                  <div><strong>Documento:</strong> {selectedPensionado.id}</div>
+                  <div><strong>Básico Pensionado:</strong> {formatCurrency(selectedPensionado.basico)}</div>
+                  <div><strong>Cargo:</strong> {selectedPensionado.cargo || 'N/A'}</div>
+                  
+                  <div><strong>Centro Costo:</strong> {selectedPensionado.pnlCentroCosto || 'N/A'}</div>
+                  <div><strong>Dependencia:</strong> {selectedPensionado.pnlDependencia?.replace(/^V\d+-/, '') || 'N/A'}</div>
+                  <div><strong>Esquema:</strong> {selectedPensionado.esquema || 'N/A'}</div>
+                  <div><strong>Grado:</strong> {selectedPago.grado || selectedPensionado.grado || 'N/A'}</div>
+                  
+                  <Separator className="col-span-full my-1" />
+                  
+                  <div className="font-semibold text-primary"><strong>Periodo del Pago:</strong> {selectedPago.periodoPago || 'N/A'}</div>
+                  <div className="font-semibold text-primary"><strong>Fecha Liquidación:</strong> {formatFirebaseTimestamp(selectedPago.fechaLiquidacion || selectedPago.fechaProcesado)}</div>
+                  <div className="font-semibold text-primary col-span-2"><strong>Fecha Procesado:</strong> {formatFirebaseTimestamp(selectedPago.fechaProcesado, { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+                </div>
 
-            <div className="overflow-x-auto rounded-md border">
-              <Table>
-                <TableHeader className="bg-muted/50">
-                  <TableRow>
-                    <TableHead className="w-[120px]">Código</TableHead>
-                    <TableHead>Concepto</TableHead>
-                    <TableHead className="text-right">Ingresos</TableHead>
-                    <TableHead className="text-right">Egresos</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {selectedPago.detalles?.map((item, index) => (
-                    <TableRow key={index}>
-                      <TableCell>{item.codigo || 'N/A'}</TableCell>
-                      <TableCell>{item.nombre}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(item.ingresos, false)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(item.egresos, false)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t">
-                <div className="sm:col-start-2">
-                    <Label className="text-xs text-muted-foreground">Total Ingresos</Label>
-                    <p className="font-semibold text-lg">{formatCurrency(totalIngresos)}</p>
+                <div className="overflow-x-auto rounded-md border">
+                  <Table>
+                    <TableHeader className="bg-muted/50">
+                      <TableRow>
+                        <TableHead className="w-[120px]">Código</TableHead>
+                        <TableHead>Concepto</TableHead>
+                        <TableHead className="text-right">Ingresos</TableHead>
+                        <TableHead className="text-right">Egresos</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedPago.detalles?.map((item, index) => (
+                        <TableRow key={index}>
+                          <TableCell>{item.codigo || 'N/A'}</TableCell>
+                          <TableCell>{item.nombre}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(item.ingresos, false)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(item.egresos, false)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
-                <div>
-                    <Label className="text-xs text-muted-foreground">Total Egresos</Label>
-                    <p className="font-semibold text-lg">{formatCurrency(totalEgresos)}</p>
+                
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t">
+                    <div className="sm:col-start-2">
+                        <Label className="text-xs text-muted-foreground">Total Ingresos</Label>
+                        <p className="font-semibold text-lg">{formatCurrency(totalIngresos)}</p>
+                    </div>
+                    <div>
+                        <Label className="text-xs text-muted-foreground">Total Egresos</Label>
+                        <p className="font-semibold text-lg">{formatCurrency(totalEgresos)}</p>
+                    </div>
+                    <div className="bg-primary/10 p-3 rounded-md sm:col-span-1 flex flex-col justify-center items-end">
+                        <Label className="text-sm font-medium text-primary">Neto a Pagar</Label>
+                        <p className="font-bold text-xl text-primary">{formatCurrency(selectedPago.valorNeto)}</p>
+                    </div>
                 </div>
-                 <div className="bg-primary/10 p-3 rounded-md sm:col-span-1 flex flex-col justify-center items-end">
-                    <Label className="text-sm font-medium text-primary">Neto a Pagar</Label>
-                    <p className="font-bold text-xl text-primary">{formatCurrency(selectedPago.valorNeto)}</p>
-                </div>
-            </div>
-            {selectedPensionado.pnlMensaje && selectedPensionado.pnlMensaje !== "MIGRA" && (
-                <div className="mt-4 p-3 bg-accent/10 border border-accent/50 text-accent-foreground rounded-md text-sm">
-                    <strong>Mensaje Adicional:</strong> {selectedPensionado.pnlMensaje}
-                </div>
-            )}
-          </CardContent>
-           <CardFooter className="p-4 sm:p-6 border-t bg-muted/20">
-                <p className="text-xs text-muted-foreground text-center w-full">
-                    Este es un comprobante de pago generado por el sistema ConsorcioManager.
-                    ID del Pago: {selectedPago.id}
-                </p>
-            </CardFooter>
+                {selectedPensionado.pnlMensaje && selectedPensionado.pnlMensaje !== "MIGRA" && (
+                    <div className="mt-4 p-3 bg-accent/10 border border-accent/50 text-accent-foreground rounded-md text-sm">
+                        <strong>Mensaje Adicional:</strong> {selectedPensionado.pnlMensaje}
+                    </div>
+                )}
+              </CardContent>
+              <CardFooter className="p-4 sm:p-6 border-t bg-muted/20">
+                    <p className="text-xs text-muted-foreground text-center w-full">
+                        Este es un comprobante de pago generado por el sistema ConsorcioManager.
+                        ID del Pago: {selectedPago.id}
+                    </p>
+                </CardFooter>
+            </>
+          ) : (
+             allPagosList.length > 0 && ( // Only show if there are pagos but none selected for current filters
+                <CardContent className="pt-6">
+                    <div className="text-center text-muted-foreground py-12">
+                        <CalendarDays className="mx-auto h-16 w-16 mb-4 text-primary/30" />
+                        <p className="text-lg font-semibold">Seleccione un Periodo</p>
+                        <p className="text-sm">Use los filtros de año y mes para ver un comprobante de pago específico, o no se encontró un pago para el periodo actual.</p>
+                    </div>
+                </CardContent>
+             )
+          )}
         </Card>
       )}
 
-      {!selectedPensionado && !isLoading && !isContextLoading && !error && (
+      {!selectedPensionado && !isLoading && !isContextLoading && !error && ( // Initial state, no search yet
         <Card className="mt-6 shadow-sm border-dashed border-muted-foreground/50">
           <CardContent className="pt-6">
             <div className="text-center text-muted-foreground py-12">
@@ -532,7 +560,7 @@ export default function PagosDetallePage() {
           </CardContent>
         </Card>
       )}
-       {selectedPensionado && allPagosList.length === 0 && !isLoading && !isContextLoading && (
+       {selectedPensionado && allPagosList.length === 0 && !isLoading && !isContextLoading && ( // Pensionado found, but no payments
         <Card className="mt-6 shadow-sm border-dashed border-muted-foreground/50">
             <CardContent className="pt-6">
                 <div className="text-center text-muted-foreground py-12">
@@ -543,17 +571,6 @@ export default function PagosDetallePage() {
             </CardContent>
         </Card>
       )}
-       {selectedPensionado && allPagosList.length > 0 && !selectedPago && !isLoading && !isContextLoading && (
-         <Card className="mt-6 shadow-sm border-dashed border-muted-foreground/50">
-            <CardContent className="pt-6">
-                <div className="text-center text-muted-foreground py-12">
-                    <CalendarDays className="mx-auto h-16 w-16 mb-4 text-primary/30" />
-                    <p className="text-lg font-semibold">Seleccione un Periodo</p>
-                    <p className="text-sm">Use los filtros de año y mes para ver un comprobante de pago específico, o no se encontró un pago para el periodo actual.</p>
-                </div>
-            </CardContent>
-        </Card>
-       )}
     </div>
   );
 }
