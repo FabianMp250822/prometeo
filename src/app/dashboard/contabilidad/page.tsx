@@ -79,7 +79,7 @@ export default function ContabilidadPage() {
 
   return (
     <div>
-      <Card className="shadow-md sticky top-[7.5rem] z-10 bg-card/95 backdrop-blur-sm -mt-4 sm:-mt-6 md:-mt-8 mb-2">
+      <Card className="shadow-md sticky top-[7.5rem] z-10 bg-card/95 backdrop-blur-sm mb-2">
         <CardHeader className="pb-2 pt-3 px-4">
           <CardTitle className="flex items-center text-xl font-headline text-primary">
             <BookText className="mr-3 h-6 w-6" />
