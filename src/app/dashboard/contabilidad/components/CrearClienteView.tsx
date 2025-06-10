@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UserPlus, Save, UploadCloud, Search, Loader2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { db, storage } from '@/lib/firebase'; // Asegúrate que la ruta sea correcta
+import { db, storage } from '@/lib/firebase';
 import { doc, getDoc, setDoc, collection, addDoc, Timestamp } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
@@ -37,11 +37,11 @@ const formSchema = z.object({
   telefonoFijo: z.string().regex(/^[0-9+ ]*$/, "Teléfono fijo inválido").optional().or(z.literal('')),
   celular: z.string().regex(/^[0-9+ ]*$/, "Número de celular inválido").min(7, "Celular debe tener al menos 7 dígitos"),
   multiplicadorSalarioMinimo: z.coerce.number({invalid_type_error: "Debe ser un número"}).min(0, "Debe ser un número positivo").default(2),
-  salarioACancelar: z.coerce.number({invalid_type_error: "Debe ser un número"}).min(0, "Debe ser un valor positivo").default(2600000),
+  salarioACancelar: z.coerce.number({invalid_type_error: "Debe ser un número"}).min(0, "Debe ser un valor positivo").default(0),
   plazoEnMeses: z.coerce.number({invalid_type_error: "Debe ser un número"}).int("Debe ser un número entero").min(0, "Debe ser un número entero positivo").default(0),
   convenioPago: z.instanceof(FileList).optional()
-    .refine(files => !files || files.length === 0 || files[0].size <= 5 * 1024 * 1024, `El archivo no debe exceder 5MB.`)
-    .refine(files => !files || files.length === 0 || ['application/pdf', 'image/jpeg', 'image/png'].includes(files[0].type), 'Solo se permiten archivos PDF, JPG, o PNG.')
+    .refine(files => !files || files.length === 0 || (files[0] && files[0].size <= 5 * 1024 * 1024), `El archivo no debe exceder 5MB.`)
+    .refine(files => !files || files.length === 0 || (files[0] && ['application/pdf', 'image/jpeg', 'image/png'].includes(files[0].type)), 'Solo se permiten archivos PDF, JPG, o PNG.')
 }).refine(data => {
   if (data.grupo === NUEVO_GRUPO_VALUE) {
     return !!(data.nuevoGrupo && data.nuevoGrupo.trim() !== "");
@@ -61,14 +61,13 @@ export default function CrearClienteView() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [isVerifyingCedula, setIsVerifyingCedula] = useState<boolean>(false);
   const [calculatedCuotaMensual, setCalculatedCuotaMensual] = useState<string>('$0.00');
-  // const [pensionadoDataFromDB, setPensionadoDataFromDB] = useState<any>(null); // Podría usarse para lógica más compleja
 
   const { register, handleSubmit, control, watch, setValue, getValues, reset, formState: { errors, isSubmitting } } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       aporteCostosOperativos: 1300000,
       multiplicadorSalarioMinimo: 2,
-      salarioACancelar: 2600000,
+      salarioACancelar: 0, 
       plazoEnMeses: 0,
       grupo: '',
       nombres: '',
@@ -86,21 +85,31 @@ export default function CrearClienteView() {
   const nuevoGrupoWatched = watch("nuevoGrupo");
   const salarioACancelarWatched = watch("salarioACancelar");
   const plazoEnMesesWatched = watch("plazoEnMeses");
+  const aporteCostosOperativosWatched = watch("aporteCostosOperativos");
+  const multiplicadorSalarioMinimoWatched = watch("multiplicadorSalarioMinimo");
 
   useEffect(() => {
     if (selectedGrupo === NUEVO_GRUPO_VALUE) {
       setShowNuevoGrupoInput(true);
     } else {
       setShowNuevoGrupoInput(false);
-      if (nuevoGrupoWatched) {
+      if (getValues("nuevoGrupo")) {
           setValue("nuevoGrupo", "", { shouldValidate: false });
       }
     }
-  }, [selectedGrupo, setValue, nuevoGrupoWatched]);
+  }, [selectedGrupo, setValue, getValues]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
   };
+
+  useEffect(() => {
+    const aporte = Number(aporteCostosOperativosWatched);
+    const multiplicador = Number(multiplicadorSalarioMinimoWatched);
+    if (!isNaN(aporte) && !isNaN(multiplicador) && aporte > 0 && multiplicador >= 0) {
+      setValue("salarioACancelar", aporte * multiplicador, { shouldValidate: true });
+    }
+  }, [aporteCostosOperativosWatched, multiplicadorSalarioMinimoWatched, setValue]);
 
   useEffect(() => {
     const salario = Number(salarioACancelarWatched);
@@ -110,7 +119,7 @@ export default function CrearClienteView() {
       if (plazo > 0) {
         setCalculatedCuotaMensual(formatCurrency(salario / plazo));
       } else {
-        setCalculatedCuotaMensual(formatCurrency(salario)); // Si plazo es 0, cuota es el total
+        setCalculatedCuotaMensual(formatCurrency(salario)); 
       }
     } else {
       setCalculatedCuotaMensual(formatCurrency(0));
@@ -121,7 +130,7 @@ export default function CrearClienteView() {
   const handleVerificarCedula = async () => {
     const cedula = getValues("cedula");
     if (!cedula || cedula.trim().length < 5) {
-      toast({ title: "Error", description: "Por favor, ingrese una cédula válida.", variant: "destructive" });
+      toast({ title: "Cédula Inválida", description: "Por favor, ingrese una cédula válida para verificar.", variant: "destructive" });
       return;
     }
     setIsVerifyingCedula(true);
@@ -131,27 +140,45 @@ export default function CrearClienteView() {
 
       if (docSnap.exists()) {
         const data = docSnap.data();
-        // Autocompletar campos
-        setValue("nombres", data.nombres || "");
-        setValue("apellidos", data.apellidos || "");
+        
+        const empleadoFullName = data.empleado || "";
+        const ccMarker = " (C.C.";
+        let extractedNombres = "";
+        let extractedApellidos = "";
+
+        if (empleadoFullName.includes(ccMarker)) {
+          const namePart = empleadoFullName.substring(0, empleadoFullName.indexOf(ccMarker)).trim();
+          const nameParts = namePart.split(" ");
+          if (nameParts.length > 1) {
+            extractedNombres = nameParts.pop() || "";
+            extractedApellidos = nameParts.join(" ");
+          } else {
+            extractedApellidos = namePart; 
+          }
+        } else if (empleadoFullName) {
+            const nameParts = empleadoFullName.trim().split(" ");
+             if (nameParts.length > 2) { 
+                extractedNombres = nameParts.pop() || "";
+                extractedApellidos = nameParts.join(" ");
+            } else if (nameParts.length === 2) { 
+                extractedNombres = nameParts.pop() || "";
+                extractedApellidos = nameParts[0] || ""; // Asignar el primer elemento a apellidos
+            } else {
+                extractedApellidos = empleadoFullName.trim();
+            }
+        }
+
+        setValue("nombres", extractedNombres || data.nombres || "");
+        setValue("apellidos", extractedApellidos || data.apellidos || "");
         setValue("direccion", data.direccion || "");
         setValue("email", data.email || "");
         setValue("telefonoFijo", data.telefonoFijo || "");
         setValue("celular", data.celular || "");
-        // Campos relacionados con el proceso de pago no se autocompletan desde aquí, se ingresan nuevos
-        // setValue("aporteCostosOperativos", data.aporteCostosOperativos || 1300000);
-        // setValue("multiplicadorSalarioMinimo", data.multiplicadorSalarioMinimo || 2);
-        // setValue("salarioACancelar", data.salarioACancelar || 2600000);
-        // setValue("plazoEnMeses", data.plazoEnMeses || 0);
-        // setValue("grupo", data.grupo || ""); 
-        // No autocompletar grupo para permitir crear un nuevo proceso de pago con grupo diferente.
+        // No autocompletar grupo, ni valores financieros, ni convenio.
         
-        toast({ title: "Pensionado Encontrado", description: "Datos del pensionado cargados en el formulario.", variant: "default" });
+        toast({ title: "Pensionado Encontrado", description: "Datos del pensionado cargados. Puede editarlos si es necesario.", variant: "default" });
       } else {
-        toast({ title: "Pensionado No Encontrado", description: "Puede continuar para registrar un nuevo cliente.", variant: "default" });
-        // Opcional: limpiar campos si se desea que no queden datos de una búsqueda anterior
-        // setValue("nombres", "");
-        // setValue("apellidos", "");
+        toast({ title: "Pensionado No Encontrado", description: "Puede continuar para registrar un nuevo cliente con esta cédula.", variant: "default" });
       }
     } catch (error) {
       console.error("Error verificando cédula:", error);
@@ -165,16 +192,16 @@ export default function CrearClienteView() {
     let grupoFinal = data.grupo;
     if (data.grupo === NUEVO_GRUPO_VALUE && data.nuevoGrupo) {
       const nuevoNombreGrupoUpper = data.nuevoGrupo.toUpperCase().trim();
-      if (currentGrupos.some(g => g.value === nuevoNombreGrupoUpper)) {
+      if (currentGrupos.some(g => g.value === nuevoNombreGrupoUpper) || predefinedGrupos.some(pg => pg.value === nuevoNombreGrupoUpper)) {
         toast({
           title: "Error de Validación",
           description: `El grupo "${nuevoNombreGrupoUpper}" ya existe. Por favor, elija otro nombre o selecciónelo de la lista.`,
           variant: "destructive",
         });
-        return; // Detener el envío
+        return; 
       }
       grupoFinal = nuevoNombreGrupoUpper;
-      // Opcional: añadir a currentGrupos para la sesión actual, o manejarlo globalmente si es necesario
+      // Opcional: añadir a la lista de grupos para futuras selecciones en esta sesión
       // setCurrentGrupos(prev => [...prev, { value: nuevoNombreGrupoUpper, label: nuevoNombreGrupoUpper}]);
       toast({
           title: "Nuevo Grupo Registrado",
@@ -185,7 +212,7 @@ export default function CrearClienteView() {
     let convenioPagoUrl: string | null = null;
     if (data.convenioPago && data.convenioPago.length > 0) {
       const file = data.convenioPago[0];
-      const fileStorageRef = storageRef(storage, `convenios_pago/${data.cedula}/${file.name}`);
+      const fileStorageRef = storageRef(storage, `convenios_pago/${data.cedula.trim()}/${Date.now()}_${file.name}`);
       try {
         await uploadBytes(fileStorageRef, file);
         convenioPagoUrl = await getDownloadURL(fileStorageRef);
@@ -193,49 +220,53 @@ export default function CrearClienteView() {
       } catch (error) {
         console.error("Error subiendo archivo:", error);
         toast({ title: "Error de Archivo", description: "No se pudo subir el convenio de pago.", variant: "destructive" });
-        return; // Detener si la subida del archivo falla
+        return; // Detener si falla la subida del archivo
       }
     }
 
+    const aporteNum = Number(data.aporteCostosOperativos);
+    const multNum = Number(data.multiplicadorSalarioMinimo);
+    const salarioNum = Number(data.salarioACancelar);
+    const plazoNum = Number(data.plazoEnMeses);
+    const cuotaMensualNum = parseFloat(calculatedCuotaMensual.replace(/[$.]/g, '').replace(',', '.')) || 0;
+
     const pensionadoDataToSave = {
-      nombres: data.nombres,
-      apellidos: data.apellidos,
-      cedula: data.cedula, // Usado como ID, también se guarda como campo
-      direccion: data.direccion,
-      email: data.email || null,
-      telefonoFijo: data.telefonoFijo || null,
-      celular: data.celular,
-      // Los siguientes campos son específicos del proceso y también se podrían guardar en el pensionado
-      // o manejar solo en la subcolección pagos_procesos si se prefiere no duplicar.
-      // Por ahora, los guardaremos también a nivel de pensionado para consistencia con autocompletado básico.
-      // Podría decidirse que algunos de estos solo van a la subcolección.
-      ultimoAporteCostosOperativos: data.aporteCostosOperativos,
+      nombres: data.nombres.trim(),
+      apellidos: data.apellidos.trim(),
+      cedula: data.cedula.trim(), 
+      empleado: `${data.apellidos.trim()} ${data.nombres.trim()} (C.C. ${data.cedula.trim()})`,
+      direccion: data.direccion.trim(),
+      email: data.email?.trim() || null,
+      telefonoFijo: data.telefonoFijo?.trim() || null,
+      celular: data.celular.trim(),
+      // Guardar los datos del último proceso para referencia
+      ultimoAporteCostosOperativos: aporteNum,
       ultimoGrupoCliente: grupoFinal,
-      ultimoMultiplicadorSalarioMinimo: data.multiplicadorSalarioMinimo,
-      ultimoSalarioACancelar: data.salarioACancelar,
-      ultimoPlazoEnMeses: data.plazoEnMeses,
-      convenioPagoUrl: convenioPagoUrl, // URL del último convenio
+      ultimoMultiplicadorSalarioMinimo: multNum,
+      ultimoSalarioACancelar: salarioNum,
+      ultimoPlazoEnMeses: plazoNum,
+      ultimoConvenioPagoUrl: convenioPagoUrl, // Guardar URL aquí también
       fechaUltimaActualizacion: Timestamp.now(),
     };
 
     const procesoPagoData = {
-      aporteCostosOperativos: data.aporteCostosOperativos,
+      aporteCostosOperativos: aporteNum,
       grupoCliente: grupoFinal,
-      multiplicadorSalarioMinimo: data.multiplicadorSalarioMinimo,
-      salarioACancelar: data.salarioACancelar,
-      plazoEnMeses: data.plazoEnMeses,
-      cuotaMensualCalculada: parseFloat(calculatedCuotaMensual.replace(/[$.]/g, '').replace(',', '.')) || 0,
+      multiplicadorSalarioMinimo: multNum,
+      salarioACancelar: salarioNum,
+      plazoEnMeses: plazoNum,
+      cuotaMensualCalculada: cuotaMensualNum,
       convenioPagoUrl: convenioPagoUrl,
       fechaCreacionProceso: Timestamp.now(),
-      estadoProceso: 'Pendiente', // Estado inicial del proceso
+      estadoProceso: 'Pendiente', 
+      cedulaCliente: data.cedula.trim(), // Referencia al cliente
+      nombreCliente: `${data.nombres.trim()} ${data.apellidos.trim()}`, // Nombre completo para fácil visualización
     };
 
     try {
-      // Guardar/Actualizar en la colección 'pensionados'
       const pensionadoDocRef = doc(db, "pensionados", data.cedula.trim());
       await setDoc(pensionadoDocRef, pensionadoDataToSave, { merge: true });
 
-      // Guardar en la subcolección 'pagos_procesos'
       const pagosProcesosColRef = collection(db, "pensionados", data.cedula.trim(), "pagos_procesos");
       await addDoc(pagosProcesosColRef, procesoPagoData);
 
@@ -243,9 +274,11 @@ export default function CrearClienteView() {
         title: "Cliente Registrado Exitosamente",
         description: `El cliente ${data.nombres} ${data.apellidos} ha sido guardado y el proceso de pago iniciado.`,
       });
-      reset(); // Limpiar el formulario
+      reset(); 
       setFileName(null);
       setCalculatedCuotaMensual('$0.00');
+      // No limpiar `currentGrupos` si se añadió uno nuevo, para que esté disponible
+      // Si el grupo era uno de los predefinidos o no se añadió uno nuevo, `currentGrupos` no cambia.
 
     } catch (error) {
       console.error('Error registrando cliente:', error);
@@ -263,14 +296,15 @@ export default function CrearClienteView() {
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
+    let chosenFile: File | null = null;
     if (files && files.length > 0) {
-      setFileName(files[0].name);
-      // RHF ya maneja el archivo a través de register
+      chosenFile = files[0];
+      setFileName(chosenFile.name);
     } else {
       setFileName(null);
     }
-     // Forzar validación de RHF para el campo de archivo
-    setValue("convenioPago", files, { shouldValidate: true });
+    // setValue actualiza el FileList o undefined
+    setValue("convenioPago", files && files.length > 0 ? files : undefined, { shouldValidate: true });
   };
 
 
@@ -319,7 +353,7 @@ export default function CrearClienteView() {
                   <Input 
                     id="nuevoGrupo" 
                     placeholder="ESCRIBA EL NUEVO GRUPO" 
-                    value={nuevoGrupoWatched || ""}
+                    value={getValues("nuevoGrupo") || ""}
                     onChange={handleNuevoGrupoInputChange}
                     className="uppercase"
                   />
@@ -328,18 +362,6 @@ export default function CrearClienteView() {
               )}
             </div>
 
-             <div className="space-y-1 lg:col-span-2">
-              <Label htmlFor="nombres">Nombres</Label>
-              <Input id="nombres" {...register("nombres")} />
-              {errors.nombres && <p className="text-xs text-destructive mt-1">{errors.nombres.message}</p>}
-            </div>
-
-            <div className="space-y-1 lg:col-span-2">
-              <Label htmlFor="apellidos">Apellidos</Label>
-              <Input id="apellidos" {...register("apellidos")} />
-              {errors.apellidos && <p className="text-xs text-destructive mt-1">{errors.apellidos.message}</p>}
-            </div>
-            
             <div className="space-y-1 lg:col-span-2">
               <Label htmlFor="cedula">Cédula</Label>
               <div className="flex items-center gap-2">
@@ -350,6 +372,18 @@ export default function CrearClienteView() {
                 </Button>
               </div>
               {errors.cedula && <p className="text-xs text-destructive mt-1">{errors.cedula.message}</p>}
+            </div>
+
+            <div className="space-y-1 lg:col-span-2">
+              <Label htmlFor="apellidos">Apellidos</Label>
+              <Input id="apellidos" {...register("apellidos")} />
+              {errors.apellidos && <p className="text-xs text-destructive mt-1">{errors.apellidos.message}</p>}
+            </div>
+
+             <div className="space-y-1 lg:col-span-2">
+              <Label htmlFor="nombres">Nombres</Label>
+              <Input id="nombres" {...register("nombres")} />
+              {errors.nombres && <p className="text-xs text-destructive mt-1">{errors.nombres.message}</p>}
             </div>
 
 
@@ -396,7 +430,7 @@ export default function CrearClienteView() {
             </div>
             
             <div className="space-y-1">
-              <Label htmlFor="cuotaMensual">Cuota Mensual</Label>
+              <Label htmlFor="cuotaMensual">Cuota Mensual (Calculada)</Label>
               <Input id="cuotaMensual" value={calculatedCuotaMensual} readOnly className="bg-muted/50 focus:ring-0" />
             </div>
 
@@ -411,12 +445,12 @@ export default function CrearClienteView() {
                   type="file" 
                   className="hidden"
                   accept="application/pdf,image/jpeg,image/png"
-                  {...register("convenioPago", { onChange: handleFileChange })}
+                  {...register("convenioPago", { onChange: handleFileChange })} // Zod handles this via schema
                 />
                 {fileName && <span className="text-sm text-muted-foreground truncate max-w-xs" title={fileName}>{fileName}</span>}
                 {!fileName && <span className="text-sm text-muted-foreground">No se eligió ningún archivo</span>}
               </div>
-               {errors.convenioPago && <p className="text-xs text-destructive mt-1">{(errors.convenioPago as any).message}</p>}
+               {errors.convenioPago && <p className="text-xs text-destructive mt-1">{(errors.convenioPago as any).message || "Error con el archivo."}</p>}
             </div>
           </div>
 
@@ -431,5 +465,6 @@ export default function CrearClienteView() {
     </Card>
   );
 }
+    
 
     
