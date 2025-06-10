@@ -85,7 +85,7 @@ export default function PagosDetallePage() {
     return `${prefix}${numValue.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
   
-  const getMonthNameFromTimestamp = (ts: Timestamp | {seconds: number, nanoseconds: number} | undefined): string => {
+  const getMonthNameFromTimestamp = useCallback((ts: Timestamp | {seconds: number, nanoseconds: number} | undefined): string => {
     if (!ts) return "MesDesconocido";
     let date: Date;
     if (ts instanceof Timestamp) {
@@ -96,9 +96,9 @@ export default function PagosDetallePage() {
         return "MesDesconocido";
     }
     return date.toLocaleDateString('es-CO', { month: 'long' });
-  };
+  }, []);
   
-  const getMonthNumberFromTimestamp = (ts: Timestamp | {seconds: number, nanoseconds: number} | undefined): number => {
+  const getMonthNumberFromTimestamp = useCallback((ts: Timestamp | {seconds: number, nanoseconds: number} | undefined): number => {
     if (!ts) return 0; 
     let date: Date;
     if (ts instanceof Timestamp) {
@@ -109,7 +109,7 @@ export default function PagosDetallePage() {
         return 0;
     }
     return date.getMonth() + 1; // 1-12
-  };
+  }, []);
 
   const updateFilterOptions = useCallback((pagos: Pago[], pagoToSelect?: Pago | null) => {
     if (pagos.length > 0) {
@@ -125,54 +125,23 @@ export default function PagosDetallePage() {
       const sortedYears = Array.from(years).sort((a, b) => b.localeCompare(a));
       setAvailableYears(sortedYears);
 
-      const targetPago = pagoToSelect || pagos[0]; // Default to latest if no specific pago
+      const targetPago = pagoToSelect || pagos[0]; 
       if (targetPago && targetPago.fechaProcesado) {
         const targetDate = (targetPago.fechaProcesado instanceof Timestamp) ? targetPago.fechaProcesado.toDate() : new Date((targetPago.fechaProcesado as any).seconds * 1000);
         const targetYear = targetDate.getFullYear().toString();
-        setSelectedYearFilter(targetYear);
+        setSelectedYearFilter(targetYear); // This will trigger the effect to update months
 
-        const monthsForTargetYear = new Set<string>();
-        pagos.forEach(p => {
-          if (p.fechaProcesado) {
-            const date = (p.fechaProcesado instanceof Timestamp) ? p.fechaProcesado.toDate() : new Date((p.fechaProcesado as any).seconds * 1000);
-            if (date.getFullYear().toString() === targetYear) {
-              const monthName = getMonthNameFromTimestamp(p.fechaProcesado);
-              const monthNum = getMonthNumberFromTimestamp(p.fechaProcesado);
-              if (monthNum > 0) monthsForTargetYear.add(`${monthName.charAt(0).toUpperCase() + monthName.slice(1)} (${monthNum})`);
-            }
-          }
-        });
-        const sortedMonths = Array.from(monthsForTargetYear).sort((a,b) => {
-            const numA = parseInt(a.match(/\((\d+)\)/)?.[1] || "0");
-            const numB = parseInt(b.match(/\((\d+)\)/)?.[1] || "0");
-            return numA - numB;
-        });
-        setAvailableMonths(sortedMonths);
-        
-        const targetMonthName = getMonthNameFromTimestamp(targetPago.fechaProcesado);
-        const targetMonthNum = getMonthNumberFromTimestamp(targetPago.fechaProcesado);
-        const targetMonthFilterValue = `${targetMonthName.charAt(0).toUpperCase() + targetMonthName.slice(1)} (${targetMonthNum})`;
-        if (sortedMonths.includes(targetMonthFilterValue)) {
-          setSelectedMonthFilter(targetMonthFilterValue);
-        } else if (sortedMonths.length > 0) {
-          setSelectedMonthFilter(sortedMonths[0]);
-        } else {
-          setSelectedMonthFilter(undefined);
-        }
+        // Month setting will be handled by the dedicated useEffect hooks reacting to selectedYearFilter and availableMonths
       } else if (sortedYears.length > 0) {
-        setSelectedYearFilter(sortedYears[0]); // Fallback to latest year
+        setSelectedYearFilter(sortedYears[0]); 
       } else {
          setSelectedYearFilter(undefined);
-         setAvailableMonths([]);
-         setSelectedMonthFilter(undefined);
       }
     } else {
       setAvailableYears([]);
-      setAvailableMonths([]);
       setSelectedYearFilter(undefined);
-      setSelectedMonthFilter(undefined);
     }
-  }, [getMonthNameFromTimestamp, getMonthNumberFromTimestamp]);
+  }, [getMonthNameFromTimestamp, getMonthNumberFromTimestamp]); // Removed setSelectedMonthFilter & setAvailableMonths
 
 
   useEffect(() => {
@@ -186,7 +155,7 @@ export default function PagosDetallePage() {
       setError(null);
 
       if (contextPagos.length > 0) {
-        setSelectedPago(contextPagos[0]); // Mostrar el último pago por defecto
+        setSelectedPago(contextPagos[0]); 
         updateFilterOptions(contextPagos, contextPagos[0]);
       } else {
         setSelectedPago(null);
@@ -252,9 +221,8 @@ export default function PagosDetallePage() {
       });
       
       setContextPensionadoData(pensionadoData, pagosTemp);
-      // El useEffect de carga de contexto se encargará de actualizar el estado local
-      // setSelectedPensionado(pensionadoData);
-      // setAllPagosList(pagosTemp);
+      // setSelectedPensionado(pensionadoData); // Will be set by context useEffect
+      // setAllPagosList(pagosTemp); // Will be set by context useEffect
       // if (pagosTemp.length > 0) {
       //   setSelectedPago(pagosTemp[0]);
       //   updateFilterOptions(pagosTemp, pagosTemp[0]);
@@ -262,7 +230,6 @@ export default function PagosDetallePage() {
       //   setSelectedPago(null);
       //   updateFilterOptions([], null);
       // }
-
     } catch (err: any) {
       console.error("Error fetching pensioner details or payments:", err);
       setError("Ocurrió un error al cargar los datos: " + err.message);
@@ -274,7 +241,7 @@ export default function PagosDetallePage() {
     }
   };
   
-  // Efecto para actualizar las opciones de mes si el año cambia
+  // Efecto para actualizar las opciones de mes si el año o la lista de pagos cambia
   useEffect(() => {
     if (selectedYearFilter && allPagosList.length > 0) {
         const months = new Set<string>();
@@ -293,35 +260,46 @@ export default function PagosDetallePage() {
                 if (monthNum > 0) months.add(`${monthName.charAt(0).toUpperCase() + monthName.slice(1)} (${monthNum})`);
             }
         });
-        const sortedMonths = Array.from(months).sort((a,b) => {
+        const sortedMonthsArray = Array.from(months).sort((a,b) => {
             const numA = parseInt(a.match(/\((\d+)\)/)?.[1] || "0");
             const numB = parseInt(b.match(/\((\d+)\)/)?.[1] || "0");
             return numA - numB;
         });
-        setAvailableMonths(sortedMonths);
+        
+        setAvailableMonths(currentAvailableMonths => {
+            if (JSON.stringify(currentAvailableMonths) !== JSON.stringify(sortedMonthsArray)) {
+                return sortedMonthsArray;
+            }
+            return currentAvailableMonths;
+        });
 
-        // Si el mes seleccionado actualmente no está en los nuevos meses disponibles,
-        // o si no hay mes seleccionado, seleccionar el primero disponible.
-        if (!selectedMonthFilter || !sortedMonths.includes(selectedMonthFilter)) {
-           if (sortedMonths.length > 0) {
-            setSelectedMonthFilter(sortedMonths[0]);
-           } else {
-            setSelectedMonthFilter(undefined); // No hay meses para este año
-           }
-        }
-    } else if (!selectedYearFilter) {
+    } else { 
         setAvailableMonths([]);
-        setSelectedMonthFilter(undefined);
     }
   }, [selectedYearFilter, allPagosList, getMonthNameFromTimestamp, getMonthNumberFromTimestamp]);
 
+  // Efecto para auto-seleccionar/validar el mes cuando cambian los meses disponibles o el año
+  useEffect(() => {
+    if (selectedYearFilter) { 
+        if (availableMonths.length > 0) {
+            if (!selectedMonthFilter || !availableMonths.includes(selectedMonthFilter)) {
+                setSelectedMonthFilter(availableMonths[0]); 
+            }
+        } else {
+             if (selectedMonthFilter !== undefined) setSelectedMonthFilter(undefined);
+        }
+    } else {
+        if (selectedMonthFilter !== undefined) setSelectedMonthFilter(undefined);
+    }
+  }, [selectedYearFilter, availableMonths, selectedMonthFilter]); // selectedMonthFilter is kept to re-validate if it changes externally, conditional set prevents loop
 
-  // Efecto para actualizar el pago seleccionado cuando cambian los filtros de año/mes
+
+  // Efecto para actualizar el pago seleccionado cuando cambian los filtros de año/mes o la lista de pagos
   useEffect(() => {
     if (selectedYearFilter && selectedMonthFilter && allPagosList.length > 0) {
         const monthNumberToFind = parseInt(selectedMonthFilter.match(/\((\d+)\)/)?.[1] || "0");
-        if (monthNumberToFind === 0) {
-            setSelectedPago(null);
+        if (monthNumberToFind === 0) { // Invalid month string
+            if (selectedPago !== null) setSelectedPago(null);
             return;
         }
 
@@ -333,23 +311,21 @@ export default function PagosDetallePage() {
             return pagoAnio === selectedYearFilter && pagoMes === monthNumberToFind;
         });
         
-        if (selectedPago?.id !== pagoEncontrado?.id) { // Solo actualizar si es diferente
+        if (selectedPago?.id !== pagoEncontrado?.id) { 
             setSelectedPago(pagoEncontrado || null);
         }
 
-        if (!pagoEncontrado && (selectedYearFilter || selectedMonthFilter)) { // Solo mostrar toast si los filtros estaban activos
+        if (!pagoEncontrado && (selectedYearFilter || selectedMonthFilter)) { 
             toast({ title: "Sin Pago", description: `No se encontró un pago para ${selectedMonthFilter} de ${selectedYearFilter}.`, variant: "default" });
         }
-
-    } else if (allPagosList.length > 0 && (!selectedYearFilter || !selectedMonthFilter) && selectedPago?.id !== allPagosList[0]?.id) {
-        // Si los filtros no están completos y el pago seleccionado no es el último, volver al último.
-        // Esto cubre el caso de limpiar los filtros.
-        // setSelectedPago(allPagosList[0]);
-        // updateFilterOptions(allPagosList, allPagosList[0]); // Esto podría causar un loop si no se maneja bien
-    } else if (allPagosList.length === 0) {
-        setSelectedPago(null);
+    } else if (allPagosList.length === 0) { 
+        if (selectedPago !== null) setSelectedPago(null);
     }
-  }, [selectedYearFilter, selectedMonthFilter, allPagosList, toast, selectedPago?.id, updateFilterOptions]);
+    // If filters are not fully set but allPagosList is not empty,
+    // the selectedPago should ideally be the latest (allPagosList[0]),
+    // which is handled by the initial data loading effect (from context or search).
+    // This effect should primarily react to *complete* filter sets.
+  }, [selectedYearFilter, selectedMonthFilter, allPagosList, toast, selectedPago?.id]);
 
 
   const handleSearch = () => {
