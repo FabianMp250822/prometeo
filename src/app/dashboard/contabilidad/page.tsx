@@ -52,13 +52,15 @@ const DefaultContabilidadView = () => (
             </p>
             <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {submenuItems.filter(item => item.id !== 'agregar-pago').slice(0,3).map(item => (
-                     <Link key={item.id} href={`/dashboard/contabilidad?view=${item.id}`} passHref legacyBehavior>
-                        <Button variant="outline" className="w-full justify-start text-left h-auto py-3 shadow-sm hover:shadow-md transition-shadow">
-                            <item.icon className="mr-3 h-5 w-5 flex-shrink-0 text-primary" />
-                            <div>
-                                <p className="font-semibold text-foreground">{item.label}</p>
-                                <p className="text-xs text-muted-foreground">Acceder a {item.label.toLowerCase()}</p>
-                            </div>
+                     <Link key={item.id} href={`/dashboard/contabilidad?view=${item.id}`}>
+                        <Button asChild variant="outline" className="w-full justify-start text-left h-auto py-3 shadow-sm hover:shadow-md transition-shadow">
+                            <span> {/* Added span to be the direct child for Button with asChild */}
+                                <item.icon className="mr-3 h-5 w-5 flex-shrink-0 text-primary" />
+                                <div>
+                                    <p className="font-semibold text-foreground">{item.label}</p>
+                                    <p className="text-xs text-muted-foreground">Acceder a {item.label.toLowerCase()}</p>
+                                </div>
+                            </span>
                         </Button>
                     </Link>
                 ))}
@@ -88,15 +90,18 @@ export default function ContabilidadPage() {
         <CardContent className="p-0">
           <nav className="flex flex-wrap items-center gap-1 border-t border-b px-3 py-2">
             {submenuItems.map((item) => (
-              <Link key={item.id} href={`${pathname}?view=${item.id}`} passHref legacyBehavior>
+              <Link key={item.id} href={`${pathname}?view=${item.id}`}>
                 <Button
+                  asChild
                   variant={item.isPrimaryAction ? 'default' : (currentView === item.id ? 'secondary' : 'ghost')}
                   size="sm"
                   className={`font-medium text-xs sm:text-sm px-2 py-1.5 h-auto sm:px-3 sm:py-2 ${item.isPrimaryAction ? 'shadow-md' : ''}`}
                   aria-current={currentView === item.id ? 'page' : undefined}
                 >
-                  <item.icon className="mr-1.5 h-4 w-4 sm:mr-2 sm:h-4 sm:w-4 flex-shrink-0" />
-                  {item.label}
+                  <span> {/* Added span to be the direct child for Button with asChild */}
+                    <item.icon className="mr-1.5 h-4 w-4 sm:mr-2 sm:h-4 sm:w-4 flex-shrink-0" />
+                    {item.label}
+                  </span>
                 </Button>
               </Link>
             ))}
