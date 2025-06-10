@@ -148,23 +148,27 @@ export default function CrearClienteView() {
 
         if (empleadoFullName.includes(ccMarker)) {
           const namePart = empleadoFullName.substring(0, empleadoFullName.indexOf(ccMarker)).trim();
-          const nameParts = namePart.split(" ");
-          if (nameParts.length > 1) {
-            extractedNombres = nameParts.pop() || "";
-            extractedApellidos = nameParts.join(" ");
-          } else {
-            extractedApellidos = namePart; 
+          const nameParts = namePart.split(" ").filter(part => part.length > 0);
+          
+          if (nameParts.length > 0) {
+            extractedNombres = nameParts[nameParts.length - 1]; 
+            if (nameParts.length > 1) {
+              extractedApellidos = nameParts.slice(0, nameParts.length - 1).join(" ");
+            } else {
+              extractedApellidos = ""; 
+            }
           }
         } else if (empleadoFullName) {
-            const nameParts = empleadoFullName.trim().split(" ");
-             if (nameParts.length > 2) { 
-                extractedNombres = nameParts.pop() || "";
-                extractedApellidos = nameParts.join(" ");
-            } else if (nameParts.length === 2) { 
-                extractedNombres = nameParts.pop() || "";
-                extractedApellidos = nameParts[0] || ""; // Asignar el primer elemento a apellidos
-            } else {
-                extractedApellidos = empleadoFullName.trim();
+            // Fallback si no hay (C.C.) pero sí data.empleado
+            // Y no hay data.nombres o data.apellidos explícitos
+            if (!(data.nombres || data.apellidos)) {
+                const namePartsFallback = empleadoFullName.trim().split(" ").filter(part => part.length > 0);
+                if (namePartsFallback.length > 0) {
+                    extractedNombres = namePartsFallback.pop() || "";
+                    if (namePartsFallback.length > 0) {
+                        extractedApellidos = namePartsFallback.join(" ");
+                    }
+                }
             }
         }
 
@@ -174,7 +178,6 @@ export default function CrearClienteView() {
         setValue("email", data.email || "");
         setValue("telefonoFijo", data.telefonoFijo || "");
         setValue("celular", data.celular || "");
-        // No autocompletar grupo, ni valores financieros, ni convenio.
         
         toast({ title: "Pensionado Encontrado", description: "Datos del pensionado cargados. Puede editarlos si es necesario.", variant: "default" });
       } else {
@@ -201,8 +204,6 @@ export default function CrearClienteView() {
         return; 
       }
       grupoFinal = nuevoNombreGrupoUpper;
-      // Opcional: añadir a la lista de grupos para futuras selecciones en esta sesión
-      // setCurrentGrupos(prev => [...prev, { value: nuevoNombreGrupoUpper, label: nuevoNombreGrupoUpper}]);
       toast({
           title: "Nuevo Grupo Registrado",
           description: `El grupo "${nuevoNombreGrupoUpper}" se usará para este cliente.`,
@@ -220,7 +221,7 @@ export default function CrearClienteView() {
       } catch (error) {
         console.error("Error subiendo archivo:", error);
         toast({ title: "Error de Archivo", description: "No se pudo subir el convenio de pago.", variant: "destructive" });
-        return; // Detener si falla la subida del archivo
+        return; 
       }
     }
 
@@ -239,13 +240,12 @@ export default function CrearClienteView() {
       email: data.email?.trim() || null,
       telefonoFijo: data.telefonoFijo?.trim() || null,
       celular: data.celular.trim(),
-      // Guardar los datos del último proceso para referencia
       ultimoAporteCostosOperativos: aporteNum,
       ultimoGrupoCliente: grupoFinal,
       ultimoMultiplicadorSalarioMinimo: multNum,
       ultimoSalarioACancelar: salarioNum,
       ultimoPlazoEnMeses: plazoNum,
-      ultimoConvenioPagoUrl: convenioPagoUrl, // Guardar URL aquí también
+      ultimoConvenioPagoUrl: convenioPagoUrl, 
       fechaUltimaActualizacion: Timestamp.now(),
     };
 
@@ -259,8 +259,8 @@ export default function CrearClienteView() {
       convenioPagoUrl: convenioPagoUrl,
       fechaCreacionProceso: Timestamp.now(),
       estadoProceso: 'Pendiente', 
-      cedulaCliente: data.cedula.trim(), // Referencia al cliente
-      nombreCliente: `${data.nombres.trim()} ${data.apellidos.trim()}`, // Nombre completo para fácil visualización
+      cedulaCliente: data.cedula.trim(), 
+      nombreCliente: `${data.nombres.trim()} ${data.apellidos.trim()}`,
     };
 
     try {
@@ -277,8 +277,6 @@ export default function CrearClienteView() {
       reset(); 
       setFileName(null);
       setCalculatedCuotaMensual('$0.00');
-      // No limpiar `currentGrupos` si se añadió uno nuevo, para que esté disponible
-      // Si el grupo era uno de los predefinidos o no se añadió uno nuevo, `currentGrupos` no cambia.
 
     } catch (error) {
       console.error('Error registrando cliente:', error);
@@ -303,7 +301,6 @@ export default function CrearClienteView() {
     } else {
       setFileName(null);
     }
-    // setValue actualiza el FileList o undefined
     setValue("convenioPago", files && files.length > 0 ? files : undefined, { shouldValidate: true });
   };
 
@@ -419,7 +416,7 @@ export default function CrearClienteView() {
 
             <div className="space-y-1">
               <Label htmlFor="salarioACancelar">Salario a Cancelar</Label>
-              <Input id="salarioACancelar" type="number" step="any" {...register("salarioACancelar")} />
+              <Input id="salarioACancelar" type="number" step="any" {...register("salarioACancelar")} readOnly className="bg-muted/50 focus:ring-0" />
               {errors.salarioACancelar && <p className="text-xs text-destructive mt-1">{errors.salarioACancelar.message}</p>}
             </div>
 
@@ -445,7 +442,7 @@ export default function CrearClienteView() {
                   type="file" 
                   className="hidden"
                   accept="application/pdf,image/jpeg,image/png"
-                  {...register("convenioPago", { onChange: handleFileChange })} // Zod handles this via schema
+                  {...register("convenioPago", { onChange: handleFileChange })}
                 />
                 {fileName && <span className="text-sm text-muted-foreground truncate max-w-xs" title={fileName}>{fileName}</span>}
                 {!fileName && <span className="text-sm text-muted-foreground">No se eligió ningún archivo</span>}
@@ -465,6 +462,8 @@ export default function CrearClienteView() {
     </Card>
   );
 }
+    
+
     
 
     
