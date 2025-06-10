@@ -118,7 +118,7 @@ export default function CrearClienteView() {
                 <SelectValue placeholder="Seleccione un grupo" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="" disabled>Seleccione un grupo</SelectItem>
+                {/* The SelectItem with value="" was removed from here */}
                 {grupos.map((grupo) => (
                   <SelectItem key={grupo.value} value={grupo.value}>
                     {grupo.label}
