@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 interface Pariss1Data {
   Comparte?: Timestamp;
   afilia?: string;
-  cedula?: string; 
+  cedula?: string;
   ciudad_iss?: string;
   dir_iss?: string;
   fe_adquiere?: Timestamp;
@@ -39,8 +39,8 @@ interface Pariss1Data {
   tranci?: boolean;
 }
 
-interface Pensionado extends Pariss1Data { 
-  id: string; 
+interface Pensionado extends Pariss1Data {
+  id: string;
   ano_jubilacion?: string;
   basico?: string;
   cargo?: string;
@@ -49,11 +49,11 @@ interface Pensionado extends Pariss1Data {
   empleado?: string;
   empresa?: string;
   esquema?: string;
-  fecha?: string; 
+  fecha?: string;
   fondoSalud?: string;
   grado?: string;
   mensaje?: string;
-  neto?: string; 
+  neto?: string;
   nitEmpresa?: string;
   pnlCentroCosto?: string;
   pnlDependencia?: string;
@@ -69,12 +69,12 @@ interface PagoDetalle {
 }
 
 interface Pago {
-  id: string; 
+  id: string;
   año?: string;
   basico?: string;
   detalles?: PagoDetalle[];
   fechaLiquidacion?: string;
-  fechaProcesado?: Timestamp; 
+  fechaProcesado?: Timestamp;
   grado?: string;
   periodoPago?: string;
   procesado?: boolean;
@@ -95,7 +95,7 @@ interface PagosAnualesStats {
 
 
 const PENSIONADOS_COLLECTION = "pensionados";
-const PARISS1_COLLECTION = "pariss1"; 
+const PARISS1_COLLECTION = "pariss1";
 const PAGOS_SUBCOLLECTION = "pagos";
 const ITEMS_PER_PAGE = 10;
 
@@ -105,7 +105,7 @@ export default function ConsultaPagosPage() {
   const [selectedPensionado, setSelectedPensionado] = useState<Pensionado | null>(null);
   const [pagosList, setPagosList] = useState<Pago[]>([]);
   const [pagosAnualesStats, setPagosAnualesStats] = useState<PagosAnualesStats>({});
-  
+
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isListLoading, setIsListLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,9 +119,9 @@ export default function ConsultaPagosPage() {
   const [searchResults, setSearchResults] = useState<Pensionado[]>([]);
   const [viewMode, setViewMode] = useState<'initial' | 'list' | 'details'>('initial');
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalResults, setTotalResults] = useState(0); 
+  const [totalResults, setTotalResults] = useState(0);
   const [lastVisibleDoc, setLastVisibleDoc] = useState<DocumentData | null>(null);
-  const [firstVisibleDoc, setFirstVisibleDoc] = useState<DocumentData | null>(null); 
+  const [firstVisibleDoc, setFirstVisibleDoc] = useState<DocumentData | null>(null);
 
   useEffect(() => {
     const fetchFilterOptions = async () => {
@@ -131,7 +131,7 @@ export default function ConsultaPagosPage() {
         const centros = new Set<string>();
         const dependenciasDisplay = new Set<string>();
         const depMap: Record<string, string> = {};
-        
+
         pensionadosSnapshot.forEach(docSnap => {
           const data = docSnap.data();
           if (data.pnlCentroCosto) centros.add(data.pnlCentroCosto);
@@ -173,26 +173,26 @@ export default function ConsultaPagosPage() {
       if (originalDepToFilter) {
         queryConstraints.push(where("pnlDependencia", "==", originalDepToFilter));
       }
-      
-      queryConstraints.push(orderBy("empleado")); 
+
+      queryConstraints.push(orderBy("empleado"));
 
       let pensionadosQuery = query(collection(db, PENSIONADOS_COLLECTION), ...queryConstraints, limit(ITEMS_PER_PAGE + 1));
       if (page > 1 && startAfterDoc) {
         pensionadosQuery = query(collection(db, PENSIONADOS_COLLECTION), ...queryConstraints, startAfter(startAfterDoc), limit(ITEMS_PER_PAGE + 1));
       } else if (page === 1) {
-         setLastVisibleDoc(null); 
+         setLastVisibleDoc(null);
       }
 
 
       const pensionadosSnapshot = await getDocs(pensionadosQuery);
       const pensionadosData = pensionadosSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Pensionado));
 
-      setFirstVisibleDoc(pensionadosSnapshot.docs[0] || null); 
+      setFirstVisibleDoc(pensionadosSnapshot.docs[0] || null);
       setLastVisibleDoc(pensionadosSnapshot.docs[pensionadosSnapshot.docs.length - (pensionadosData.length > ITEMS_PER_PAGE ? 2 : 1)] || null);
 
 
       setSearchResults(pensionadosData.slice(0, ITEMS_PER_PAGE));
-      setTotalResults(pensionadosData.length); 
+      setTotalResults(pensionadosData.length);
 
       if (pensionadosData.length === 0) {
         toast({ title: "Sin Resultados", description: "No se encontraron pensionados con los filtros seleccionados.", variant: "default" });
@@ -212,7 +212,7 @@ export default function ConsultaPagosPage() {
       setIsListLoading(false);
     }
   };
-  
+
   const parseCurrencyToNumber = (currencyString: string | undefined | null): number => {
     if (!currencyString) return 0;
     const cleanedString = String(currencyString).replace(/\./g, '').replace(',', '.');
@@ -236,7 +236,7 @@ export default function ConsultaPagosPage() {
 
         console.log(`Consulta Pagos: Pensionado ID: ${pensionadoData.id}. Datos iniciales:`, JSON.stringify(pensionadoData));
 
-        const pariss1DocRef = doc(db, PARISS1_COLLECTION, pensionadoData.id); 
+        const pariss1DocRef = doc(db, PARISS1_COLLECTION, pensionadoData.id);
         const pariss1DocSnap = await getDoc(pariss1DocRef);
         if (pariss1DocSnap.exists()) {
           pensionadoData = { ...pensionadoData, ...pariss1DocSnap.data() as Pariss1Data };
@@ -248,16 +248,16 @@ export default function ConsultaPagosPage() {
         }
         setSelectedPensionado(pensionadoData);
         setViewMode('details');
-        
+
         const pagosCollectionRef = collection(db, PENSIONADOS_COLLECTION, pensionadoData.id, PAGOS_SUBCOLLECTION);
         console.log(`Consulta Pagos: Construida referencia a la subcolección de pagos: ${pagosCollectionRef.path}`);
-        
+
         const pagosQuery = query(pagosCollectionRef, orderBy("año", "desc"), orderBy("fechaProcesado", "desc"));
         console.log("Consulta Pagos: Objeto Query de Pagos (configuración):", pagosQuery);
 
         const pagosSnapshot = await getDocs(pagosQuery);
         console.log(`Consulta Pagos: Snapshot de pagos recibido. Vacío: ${pagosSnapshot.empty}. Número de documentos: ${pagosSnapshot.docs.length}`);
-        
+
         const pagosTemp: Pago[] = [];
         pagosSnapshot.forEach(docSnap => {
             const data = docSnap.data();
@@ -279,7 +279,7 @@ export default function ConsultaPagosPage() {
 
           for (const year in groupedByYear) {
             const yearPagos = groupedByYear[year];
-            const netos = yearPagos.map(p => parseCurrencyToNumber(p.valorNeto)).filter(n => n !== 0); 
+            const netos = yearPagos.map(p => parseCurrencyToNumber(p.valorNeto)).filter(n => n !== 0);
             if (netos.length > 0) {
               stats[year] = {
                 count: yearPagos.length,
@@ -295,13 +295,13 @@ export default function ConsultaPagosPage() {
           console.log(`Consulta Pagos: Estadísticas anuales calculadas:`, JSON.stringify(stats));
         } else {
           console.warn(`Consulta Pagos: No se encontraron pagos efectivos para ${pensionadoData.id}, 'pagosList' está vacío.`);
-          setPagosAnualesStats({}); 
+          setPagosAnualesStats({});
         }
 
       } else {
         setError("No se encontró el pensionado para ver detalles.");
         toast({ title: "No encontrado", description: "Error al cargar detalles del pensionado.", variant: "destructive" });
-        setViewMode('list'); 
+        setViewMode('list');
         console.error(`Consulta Pagos: No se encontró documento de pensionado con ID: ${pensionadoId} en la ruta ${pensionadoDocRef.path}`);
       }
     } catch (err: any) {
@@ -323,7 +323,7 @@ export default function ConsultaPagosPage() {
     setSelectedPensionado(null);
     setPagosList([]);
     setPagosAnualesStats({});
-    setSearchResults([]); 
+    setSearchResults([]);
     setError(null);
     setCurrentPage(1);
     setLastVisibleDoc(null);
@@ -332,37 +332,37 @@ export default function ConsultaPagosPage() {
     if (documentoInput.trim()) {
       fetchPensionadoDetails(documentoInput.trim());
     } else if (filterCentroCosto || filterDependencia) {
-      fetchPensionadosByFilters(1); 
+      fetchPensionadosByFilters(1);
     } else {
       toast({ title: "Información requerida", description: "Ingrese un número de documento o seleccione filtros.", variant: "destructive" });
       setViewMode('initial');
     }
   };
-  
+
   const handleNextPage = () => {
-    if (totalResults > ITEMS_PER_PAGE) { 
+    if (totalResults > ITEMS_PER_PAGE) {
       fetchPensionadosByFilters(currentPage + 1, lastVisibleDoc);
     }
   };
 
   const handlePrevPage = async () => {
     if (currentPage > 1) {
-        fetchPensionadosByFilters(currentPage - 1, null); 
+        fetchPensionadosByFilters(currentPage - 1, null);
     }
   };
-  
+
   const formatFirebaseTimestamp = (timestamp: Timestamp | undefined | string): string => {
     if (!timestamp) return 'N/A';
     try {
-      if (typeof timestamp === 'string') { 
+      if (typeof timestamp === 'string') {
         const d = new Date(timestamp);
-        if (isNaN(d.getTime())) return timestamp; 
+        if (isNaN(d.getTime())) return 'N/A'; // Return N/A for invalid date strings
         return d.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
       }
       return timestamp.toDate().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
     } catch (e) {
       console.warn("Could not format timestamp:", timestamp, e);
-      return 'Fecha inválida';
+      return 'N/A'; // Return N/A if conversion fails
     }
   };
 
@@ -376,16 +376,16 @@ export default function ConsultaPagosPage() {
 
   const formatSexo = (sexoCode?: number): string => {
     if (sexoCode === undefined) return 'N/A';
-    if (sexoCode === 1) return 'Masculino'; 
-    if (sexoCode === 2) return 'Femenino';  
-    return 'Otro';
+    if (sexoCode === 1) return 'Masculino';
+    if (sexoCode === 2) return 'Femenino';
+    return 'N/A'; // Return N/A for other codes or if undefined
   };
-  
+
   const formatRegimen = (regimenCode?: number): string => {
     if (regimenCode === undefined) return 'N/A';
     if (regimenCode === 1) return 'Régimen A';
     if (regimenCode === 2) return 'Régimen B (Transición)';
-    return `Código ${regimenCode}`;
+    return `Código ${regimenCode}`; // Keep original if not 1 or 2, but should ideally be N/A if unknown
   };
 
   const formatRiesgo = (riesgoCode?: string): string => {
@@ -393,7 +393,7 @@ export default function ConsultaPagosPage() {
     if (riesgoCode === 'V') return 'Vejez';
     if (riesgoCode === 'I') return 'Invalidez';
     if (riesgoCode === 'S') return 'Sobrevivencia';
-    return riesgoCode;
+    return riesgoCode; // Keep original if not V, I, S, but should ideally be N/A if unknown
   };
 
   const formatTranci = (tranciValue?: boolean): string => {
@@ -417,11 +417,11 @@ export default function ConsultaPagosPage() {
     setFirstVisibleDoc(null);
     toast({ title: "Filtros limpiados", description: "Realice una nueva búsqueda."});
   };
-  
+
   const sortedYearsForStats = Object.keys(pagosAnualesStats).sort((a, b) => {
     if (a === "Sin Año") return 1;
     if (b === "Sin Año") return -1;
-    return b.localeCompare(a); 
+    return b.localeCompare(a);
   });
 
 
@@ -560,30 +560,30 @@ export default function ConsultaPagosPage() {
                   <div><strong>Esquema:</strong> {selectedPensionado.esquema || 'N/A'}</div>
                   <div><strong>Año Jubilación:</strong> {selectedPensionado.ano_jubilacion || 'N/A'}</div>
                   <div><strong>Fondo Salud:</strong> {selectedPensionado.fondoSalud || 'N/A'}</div>
-                  
-                  {/* Pariss1 Data */}
-                  <div><strong>Cédula (Pariss1):</strong> {selectedPensionado.cedula || 'N/A'}</div>
-                  <div><strong>Fecha Nacimiento:</strong> {formatFirebaseTimestamp(selectedPensionado.fe_nacido)}</div>
-                  <div><strong>Sexo:</strong> {formatSexo(selectedPensionado.sexo)}</div>
-                  <div><strong>Ciudad ISS:</strong> {selectedPensionado.ciudad_iss || 'N/A'}</div>
-                  <div><strong>Dirección ISS:</strong> {selectedPensionado.dir_iss || 'N/A'}</div>
-                  <div><strong>Teléfono ISS:</strong> {selectedPensionado.telefono_iss !== undefined ? selectedPensionado.telefono_iss : 'N/A'}</div>
-                  <div><strong>Afilia:</strong> {selectedPensionado.afilia || 'N/A'}</div>
-                  <div><strong>Semanas Cotizadas:</strong> {selectedPensionado.semanas !== undefined ? selectedPensionado.semanas : 'N/A'}</div>
-                  <div><strong>Régimen:</strong> {formatRegimen(selectedPensionado.regimen)}</div>
-                  <div><strong>Tipo Riesgo:</strong> {formatRiesgo(selectedPensionado.riesgo)}</div>
-                  <div><strong>Transición:</strong> {formatTranci(selectedPensionado.tranci)}</div>
-                  <div><strong>Fecha Adquiere Derecho:</strong> {formatFirebaseTimestamp(selectedPensionado.fe_adquiere)}</div>
-                  <div><strong>Fecha Causación:</strong> {formatFirebaseTimestamp(selectedPensionado.fe_causa)}</div>
-                  <div><strong>Fecha Ingreso ISS:</strong> {formatFirebaseTimestamp(selectedPensionado.fe_ingreso)}</div>
-                  <div><strong>Fecha Vinculación ISS:</strong> {formatFirebaseTimestamp(selectedPensionado.fe_vinculado)}</div>
-                  <div><strong>Fecha Comparte:</strong> {formatFirebaseTimestamp(selectedPensionado.Comparte)}</div>
-                  <div><strong>Resolución Año:</strong> {selectedPensionado.res_ano !== undefined ? selectedPensionado.res_ano : 'N/A'}</div>
-                  <div><strong>Resolución Número:</strong> {selectedPensionado.res_nro || 'N/A'}</div>
-                  <div><strong>Identificador Pariss1:</strong> {selectedPensionado.identifica !== undefined ? selectedPensionado.identifica : 'N/A'}</div>
-                  <div><strong>Mesada (Pariss1):</strong> {formatCurrency(selectedPensionado.mesada)}</div>
-                  <div><strong>Pensión Inicial (Pariss1):</strong> {formatCurrency(selectedPensionado.pension_ini)}</div>
-                  <div><strong>Seguro:</strong> {selectedPensionado.seguro !== undefined ? selectedPensionado.seguro : 'N/A'}</div>
+
+                  {/* Pariss1 Data - Conditionally Rendered */}
+                  {selectedPensionado.cedula && <div><strong>Cédula (Pariss1):</strong> {selectedPensionado.cedula}</div>}
+                  {selectedPensionado.fe_nacido && formatFirebaseTimestamp(selectedPensionado.fe_nacido) !== 'N/A' && <div><strong>Fecha Nacimiento:</strong> {formatFirebaseTimestamp(selectedPensionado.fe_nacido)}</div>}
+                  {selectedPensionado.sexo !== undefined && formatSexo(selectedPensionado.sexo) !== 'N/A' && <div><strong>Sexo:</strong> {formatSexo(selectedPensionado.sexo)}</div>}
+                  {selectedPensionado.ciudad_iss && <div><strong>Ciudad ISS:</strong> {selectedPensionado.ciudad_iss}</div>}
+                  {selectedPensionado.dir_iss && selectedPensionado.dir_iss !== "0" && <div><strong>Dirección ISS:</strong> {selectedPensionado.dir_iss}</div>}
+                  {selectedPensionado.telefono_iss !== undefined && selectedPensionado.telefono_iss !== 0 && <div><strong>Teléfono ISS:</strong> {selectedPensionado.telefono_iss}</div>}
+                  {selectedPensionado.afilia && selectedPensionado.afilia.trim() && <div><strong>Afilia:</strong> {selectedPensionado.afilia.trim()}</div>}
+                  {selectedPensionado.semanas !== undefined && <div><strong>Semanas Cotizadas:</strong> {selectedPensionado.semanas}</div>}
+                  {selectedPensionado.regimen !== undefined && formatRegimen(selectedPensionado.regimen) !== 'N/A' && <div><strong>Régimen:</strong> {formatRegimen(selectedPensionado.regimen)}</div>}
+                  {selectedPensionado.riesgo && formatRiesgo(selectedPensionado.riesgo) !== 'N/A' && <div><strong>Tipo Riesgo:</strong> {formatRiesgo(selectedPensionado.riesgo)}</div>}
+                  {selectedPensionado.tranci !== undefined && formatTranci(selectedPensionado.tranci) !== 'N/A' && <div><strong>Transición:</strong> {formatTranci(selectedPensionado.tranci)}</div>}
+                  {selectedPensionado.fe_adquiere && formatFirebaseTimestamp(selectedPensionado.fe_adquiere) !== 'N/A' && <div><strong>Fecha Adquiere Derecho:</strong> {formatFirebaseTimestamp(selectedPensionado.fe_adquiere)}</div>}
+                  {selectedPensionado.fe_causa && formatFirebaseTimestamp(selectedPensionado.fe_causa) !== 'N/A' && <div><strong>Fecha Causación:</strong> {formatFirebaseTimestamp(selectedPensionado.fe_causa)}</div>}
+                  {selectedPensionado.fe_ingreso && formatFirebaseTimestamp(selectedPensionado.fe_ingreso) !== 'N/A' && <div><strong>Fecha Ingreso ISS:</strong> {formatFirebaseTimestamp(selectedPensionado.fe_ingreso)}</div>}
+                  {selectedPensionado.fe_vinculado && formatFirebaseTimestamp(selectedPensionado.fe_vinculado) !== 'N/A' && <div><strong>Fecha Vinculación ISS:</strong> {formatFirebaseTimestamp(selectedPensionado.fe_vinculado)}</div>}
+                  {selectedPensionado.Comparte && formatFirebaseTimestamp(selectedPensionado.Comparte) !== 'N/A' && <div><strong>Fecha Comparte:</strong> {formatFirebaseTimestamp(selectedPensionado.Comparte)}</div>}
+                  {selectedPensionado.res_ano !== undefined && <div><strong>Resolución Año:</strong> {selectedPensionado.res_ano}</div>}
+                  {selectedPensionado.res_nro && <div><strong>Resolución Número:</strong> {selectedPensionado.res_nro}</div>}
+                  {selectedPensionado.identifica !== undefined && selectedPensionado.identifica !== 0 && <div><strong>Identificador Pariss1:</strong> {selectedPensionado.identifica}</div>}
+                  {selectedPensionado.mesada !== undefined && selectedPensionado.mesada !== null && selectedPensionado.mesada !== 0 && <div><strong>Mesada (Pariss1):</strong> {formatCurrency(selectedPensionado.mesada)}</div>}
+                  {selectedPensionado.pension_ini !== undefined && selectedPensionado.pension_ini !== null && selectedPensionado.pension_ini !== 0 && <div><strong>Pensión Inicial (Pariss1):</strong> {formatCurrency(selectedPensionado.pension_ini)}</div>}
+                  {selectedPensionado.seguro !== undefined && <div><strong>Seguro:</strong> {selectedPensionado.seguro}</div>}
               </div>
             </CardContent>
           </Card>
@@ -640,7 +640,7 @@ export default function ConsultaPagosPage() {
           )}
         </>
       )}
-       
+
       {viewMode === 'initial' && !isLoading && !isListLoading && !error && (
           <Card className="mt-6 shadow-sm border-dashed border-muted-foreground/50">
               <CardContent className="pt-6">
