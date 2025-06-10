@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -10,8 +10,11 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { UserPlus, Save, UploadCloud } from 'lucide-react';
+import { UserPlus, Save, UploadCloud, Search, Loader2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
+import { db, storage } from '@/lib/firebase'; // Asegúrate que la ruta sea correcta
+import { doc, getDoc, setDoc, collection, addDoc, Timestamp } from 'firebase/firestore';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const predefinedGrupos = [
   { value: 'SUPRIMIDOS', label: 'SUPRIMIDOS' },
@@ -28,7 +31,7 @@ const formSchema = z.object({
   nuevoGrupo: z.string().optional(),
   nombres: z.string().min(1, "Nombres son requeridos"),
   apellidos: z.string().min(1, "Apellidos son requeridos"),
-  cedula: z.string().min(1, "Cédula es requerida"),
+  cedula: z.string().min(5, "Cédula es requerida y debe tener al menos 5 caracteres"),
   direccion: z.string().min(1, "Dirección es requerida"),
   email: z.string().email({ message: "Correo electrónico inválido" }).optional().or(z.literal('')),
   telefonoFijo: z.string().regex(/^[0-9+ ]*$/, "Teléfono fijo inválido").optional().or(z.literal('')),
@@ -56,10 +59,13 @@ export default function CrearClienteView() {
   const [showNuevoGrupoInput, setShowNuevoGrupoInput] = useState(false);
   const [currentGrupos, setCurrentGrupos] = useState([...predefinedGrupos]);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [isVerifyingCedula, setIsVerifyingCedula] = useState<boolean>(false);
+  const [calculatedCuotaMensual, setCalculatedCuotaMensual] = useState<string>('$0.00');
+  // const [pensionadoDataFromDB, setPensionadoDataFromDB] = useState<any>(null); // Podría usarse para lógica más compleja
 
-  const { register, handleSubmit, control, watch, setValue, formState: { errors, isSubmitting } } = useForm<FormValues>({
+  const { register, handleSubmit, control, watch, setValue, getValues, reset, formState: { errors, isSubmitting } } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: { // Establecer valores por defecto aquí
+    defaultValues: {
       aporteCostosOperativos: 1300000,
       multiplicadorSalarioMinimo: 2,
       salarioACancelar: 2600000,
@@ -78,19 +84,84 @@ export default function CrearClienteView() {
 
   const selectedGrupo = watch("grupo");
   const nuevoGrupoWatched = watch("nuevoGrupo");
+  const salarioACancelarWatched = watch("salarioACancelar");
+  const plazoEnMesesWatched = watch("plazoEnMeses");
 
   useEffect(() => {
     if (selectedGrupo === NUEVO_GRUPO_VALUE) {
       setShowNuevoGrupoInput(true);
     } else {
       setShowNuevoGrupoInput(false);
-      if (nuevoGrupoWatched) { // Solo resetear si había algo
+      if (nuevoGrupoWatched) {
           setValue("nuevoGrupo", "", { shouldValidate: false });
       }
     }
   }, [selectedGrupo, setValue, nuevoGrupoWatched]);
 
-  const onSubmit = (data: FormValues) => {
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+  };
+
+  useEffect(() => {
+    const salario = Number(salarioACancelarWatched);
+    const plazo = Number(plazoEnMesesWatched);
+
+    if (!isNaN(salario) && !isNaN(plazo)) {
+      if (plazo > 0) {
+        setCalculatedCuotaMensual(formatCurrency(salario / plazo));
+      } else {
+        setCalculatedCuotaMensual(formatCurrency(salario)); // Si plazo es 0, cuota es el total
+      }
+    } else {
+      setCalculatedCuotaMensual(formatCurrency(0));
+    }
+  }, [salarioACancelarWatched, plazoEnMesesWatched]);
+
+
+  const handleVerificarCedula = async () => {
+    const cedula = getValues("cedula");
+    if (!cedula || cedula.trim().length < 5) {
+      toast({ title: "Error", description: "Por favor, ingrese una cédula válida.", variant: "destructive" });
+      return;
+    }
+    setIsVerifyingCedula(true);
+    try {
+      const pensionadoDocRef = doc(db, "pensionados", cedula.trim());
+      const docSnap = await getDoc(pensionadoDocRef);
+
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        // Autocompletar campos
+        setValue("nombres", data.nombres || "");
+        setValue("apellidos", data.apellidos || "");
+        setValue("direccion", data.direccion || "");
+        setValue("email", data.email || "");
+        setValue("telefonoFijo", data.telefonoFijo || "");
+        setValue("celular", data.celular || "");
+        // Campos relacionados con el proceso de pago no se autocompletan desde aquí, se ingresan nuevos
+        // setValue("aporteCostosOperativos", data.aporteCostosOperativos || 1300000);
+        // setValue("multiplicadorSalarioMinimo", data.multiplicadorSalarioMinimo || 2);
+        // setValue("salarioACancelar", data.salarioACancelar || 2600000);
+        // setValue("plazoEnMeses", data.plazoEnMeses || 0);
+        // setValue("grupo", data.grupo || ""); 
+        // No autocompletar grupo para permitir crear un nuevo proceso de pago con grupo diferente.
+        
+        toast({ title: "Pensionado Encontrado", description: "Datos del pensionado cargados en el formulario.", variant: "default" });
+      } else {
+        toast({ title: "Pensionado No Encontrado", description: "Puede continuar para registrar un nuevo cliente.", variant: "default" });
+        // Opcional: limpiar campos si se desea que no queden datos de una búsqueda anterior
+        // setValue("nombres", "");
+        // setValue("apellidos", "");
+      }
+    } catch (error) {
+      console.error("Error verificando cédula:", error);
+      toast({ title: "Error de Verificación", description: "No se pudo verificar la cédula.", variant: "destructive" });
+    } finally {
+      setIsVerifyingCedula(false);
+    }
+  };
+
+  const onSubmit = async (data: FormValues) => {
     let grupoFinal = data.grupo;
     if (data.grupo === NUEVO_GRUPO_VALUE && data.nuevoGrupo) {
       const nuevoNombreGrupoUpper = data.nuevoGrupo.toUpperCase().trim();
@@ -100,28 +171,90 @@ export default function CrearClienteView() {
           description: `El grupo "${nuevoNombreGrupoUpper}" ya existe. Por favor, elija otro nombre o selecciónelo de la lista.`,
           variant: "destructive",
         });
-        return;
+        return; // Detener el envío
       }
-      // Simulación: No se añade a currentGrupos aquí para evitar re-renderizados complejos
-      // En una app real, se enviaría al backend y la lista se actualizaría desde allí o un store global
       grupoFinal = nuevoNombreGrupoUpper;
+      // Opcional: añadir a currentGrupos para la sesión actual, o manejarlo globalmente si es necesario
+      // setCurrentGrupos(prev => [...prev, { value: nuevoNombreGrupoUpper, label: nuevoNombreGrupoUpper}]);
       toast({
-          title: "Nuevo Grupo Registrado (Simulación)",
-          description: `El grupo "${nuevoNombreGrupoUpper}" ha sido registrado para este cliente.`,
+          title: "Nuevo Grupo Registrado",
+          description: `El grupo "${nuevoNombreGrupoUpper}" se usará para este cliente.`,
       });
     }
 
-    const dataToSubmit = {
-      ...data,
-      grupo: grupoFinal,
-      convenioPago: data.convenioPago && data.convenioPago.length > 0 ? data.convenioPago[0] : null, // Enviar el objeto File
+    let convenioPagoUrl: string | null = null;
+    if (data.convenioPago && data.convenioPago.length > 0) {
+      const file = data.convenioPago[0];
+      const fileStorageRef = storageRef(storage, `convenios_pago/${data.cedula}/${file.name}`);
+      try {
+        await uploadBytes(fileStorageRef, file);
+        convenioPagoUrl = await getDownloadURL(fileStorageRef);
+        toast({ title: "Archivo Subido", description: "Convenio de pago cargado exitosamente." });
+      } catch (error) {
+        console.error("Error subiendo archivo:", error);
+        toast({ title: "Error de Archivo", description: "No se pudo subir el convenio de pago.", variant: "destructive" });
+        return; // Detener si la subida del archivo falla
+      }
+    }
+
+    const pensionadoDataToSave = {
+      nombres: data.nombres,
+      apellidos: data.apellidos,
+      cedula: data.cedula, // Usado como ID, también se guarda como campo
+      direccion: data.direccion,
+      email: data.email || null,
+      telefonoFijo: data.telefonoFijo || null,
+      celular: data.celular,
+      // Los siguientes campos son específicos del proceso y también se podrían guardar en el pensionado
+      // o manejar solo en la subcolección pagos_procesos si se prefiere no duplicar.
+      // Por ahora, los guardaremos también a nivel de pensionado para consistencia con autocompletado básico.
+      // Podría decidirse que algunos de estos solo van a la subcolección.
+      ultimoAporteCostosOperativos: data.aporteCostosOperativos,
+      ultimoGrupoCliente: grupoFinal,
+      ultimoMultiplicadorSalarioMinimo: data.multiplicadorSalarioMinimo,
+      ultimoSalarioACancelar: data.salarioACancelar,
+      ultimoPlazoEnMeses: data.plazoEnMeses,
+      convenioPagoUrl: convenioPagoUrl, // URL del último convenio
+      fechaUltimaActualizacion: Timestamp.now(),
     };
 
-    console.log('Cliente a crear:', dataToSubmit);
-    toast({
-      title: "Cliente Guardado (Simulación)",
-      description: `El cliente ${data.nombres} ${data.apellidos} ha sido guardado (simulación). El archivo es: ${dataToSubmit.convenioPago?.name || 'Ninguno'}.`,
-    });
+    const procesoPagoData = {
+      aporteCostosOperativos: data.aporteCostosOperativos,
+      grupoCliente: grupoFinal,
+      multiplicadorSalarioMinimo: data.multiplicadorSalarioMinimo,
+      salarioACancelar: data.salarioACancelar,
+      plazoEnMeses: data.plazoEnMeses,
+      cuotaMensualCalculada: parseFloat(calculatedCuotaMensual.replace(/[$.]/g, '').replace(',', '.')) || 0,
+      convenioPagoUrl: convenioPagoUrl,
+      fechaCreacionProceso: Timestamp.now(),
+      estadoProceso: 'Pendiente', // Estado inicial del proceso
+    };
+
+    try {
+      // Guardar/Actualizar en la colección 'pensionados'
+      const pensionadoDocRef = doc(db, "pensionados", data.cedula.trim());
+      await setDoc(pensionadoDocRef, pensionadoDataToSave, { merge: true });
+
+      // Guardar en la subcolección 'pagos_procesos'
+      const pagosProcesosColRef = collection(db, "pensionados", data.cedula.trim(), "pagos_procesos");
+      await addDoc(pagosProcesosColRef, procesoPagoData);
+
+      toast({
+        title: "Cliente Registrado Exitosamente",
+        description: `El cliente ${data.nombres} ${data.apellidos} ha sido guardado y el proceso de pago iniciado.`,
+      });
+      reset(); // Limpiar el formulario
+      setFileName(null);
+      setCalculatedCuotaMensual('$0.00');
+
+    } catch (error) {
+      console.error('Error registrando cliente:', error);
+      toast({
+        title: "Error al Registrar",
+        description: "No se pudo guardar la información del cliente.",
+        variant: "destructive",
+      });
+    }
   };
   
   const handleNuevoGrupoInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -132,15 +265,14 @@ export default function CrearClienteView() {
     const files = event.target.files;
     if (files && files.length > 0) {
       setFileName(files[0].name);
-      setValue("convenioPago", files, { shouldValidate: true });
+      // RHF ya maneja el archivo a través de register
     } else {
       setFileName(null);
-      setValue("convenioPago", undefined, { shouldValidate: true });
     }
+     // Forzar validación de RHF para el campo de archivo
+    setValue("convenioPago", files, { shouldValidate: true });
   };
 
-  // Placeholder para Cuota Mensual
-  const cuotaMensual = "$0.00"; // En una app real, esto se calcularía y actualizaría
 
   return (
     <Card className="shadow-lg">
@@ -187,8 +319,8 @@ export default function CrearClienteView() {
                   <Input 
                     id="nuevoGrupo" 
                     placeholder="ESCRIBA EL NUEVO GRUPO" 
-                    value={nuevoGrupoWatched || ""} // Controlado
-                    onChange={handleNuevoGrupoInputChange} // Para la conversión a mayúsculas
+                    value={nuevoGrupoWatched || ""}
+                    onChange={handleNuevoGrupoInputChange}
                     className="uppercase"
                   />
                   {errors.nuevoGrupo && <p className="text-xs text-destructive mt-1">{errors.nuevoGrupo.message}</p>}
@@ -196,7 +328,7 @@ export default function CrearClienteView() {
               )}
             </div>
 
-            <div className="space-y-1 lg:col-span-2">
+             <div className="space-y-1 lg:col-span-2">
               <Label htmlFor="nombres">Nombres</Label>
               <Input id="nombres" {...register("nombres")} />
               {errors.nombres && <p className="text-xs text-destructive mt-1">{errors.nombres.message}</p>}
@@ -208,13 +340,20 @@ export default function CrearClienteView() {
               {errors.apellidos && <p className="text-xs text-destructive mt-1">{errors.apellidos.message}</p>}
             </div>
             
-            <div className="space-y-1 lg:col-span-1">
+            <div className="space-y-1 lg:col-span-2">
               <Label htmlFor="cedula">Cédula</Label>
-              <Input id="cedula" {...register("cedula")} />
+              <div className="flex items-center gap-2">
+                <Input id="cedula" {...register("cedula")} className="flex-grow"/>
+                <Button type="button" variant="outline" onClick={handleVerificarCedula} disabled={isVerifyingCedula || isSubmitting}>
+                  {isVerifyingCedula ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  Verificar
+                </Button>
+              </div>
               {errors.cedula && <p className="text-xs text-destructive mt-1">{errors.cedula.message}</p>}
             </div>
 
-            <div className="space-y-1 lg:col-span-3">
+
+            <div className="space-y-1 lg:col-span-2">
               <Label htmlFor="direccion">Dirección</Label>
               <Input id="direccion" placeholder="Ingrese la dirección del cliente" {...register("direccion")} />
               {errors.direccion && <p className="text-xs text-destructive mt-1">{errors.direccion.message}</p>}
@@ -258,7 +397,7 @@ export default function CrearClienteView() {
             
             <div className="space-y-1">
               <Label htmlFor="cuotaMensual">Cuota Mensual</Label>
-              <Input id="cuotaMensual" value={cuotaMensual} readOnly className="bg-muted/50 focus:ring-0" />
+              <Input id="cuotaMensual" value={calculatedCuotaMensual} readOnly className="bg-muted/50 focus:ring-0" />
             </div>
 
             <div className="space-y-1 lg:col-span-4">
@@ -272,19 +411,18 @@ export default function CrearClienteView() {
                   type="file" 
                   className="hidden"
                   accept="application/pdf,image/jpeg,image/png"
-                  onChange={handleFileChange}
-                  {...register("convenioPago", { onChange: handleFileChange})} // Ensure RHF tracks it
+                  {...register("convenioPago", { onChange: handleFileChange })}
                 />
                 {fileName && <span className="text-sm text-muted-foreground truncate max-w-xs" title={fileName}>{fileName}</span>}
                 {!fileName && <span className="text-sm text-muted-foreground">No se eligió ningún archivo</span>}
               </div>
-               {errors.convenioPago && <p className="text-xs text-destructive mt-1">{errors.convenioPago.message}</p>}
+               {errors.convenioPago && <p className="text-xs text-destructive mt-1">{(errors.convenioPago as any).message}</p>}
             </div>
           </div>
 
           <div className="flex justify-end pt-4">
-            <Button type="submit" className="w-full md:w-auto bg-primary hover:bg-primary/90 text-primary-foreground text-base px-8 py-3" disabled={isSubmitting}>
-              <Save className="mr-2 h-5 w-5" />
+            <Button type="submit" className="w-full md:w-auto bg-primary hover:bg-primary/90 text-primary-foreground text-base px-8 py-3" disabled={isSubmitting || isVerifyingCedula}>
+              {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <Save className="mr-2 h-5 w-5" />}
               {isSubmitting ? 'Registrando...' : 'Registrar Cliente'}
             </Button>
           </div>
@@ -294,3 +432,4 @@ export default function CrearClienteView() {
   );
 }
 
+    
