@@ -10,11 +10,10 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Loader2, ListOrdered, CheckCircle, XCircle, AlertCircle, Search, Info } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { Timestamp } from 'firebase/firestore'; // Import Timestamp
+import { Timestamp } from 'firebase/firestore'; 
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
-// Definición de la estructura de datos para un registro de pago
 interface PaymentRecord {
   id: string;
   clienteId: string;
@@ -22,8 +21,8 @@ interface PaymentRecord {
   financiamientoId?: string;
   numeroCuota?: number;
   monto: number;
-  fechaPago: Timestamp; // Fecha en que el cliente dice que pagó o se registró el pago
-  fechaRegistro: Timestamp; // Fecha en que se creó este registro en el sistema
+  fechaPago: Timestamp; 
+  fechaRegistro: Timestamp; 
   origen: 'admin_directo' | 'cliente_portal_validacion';
   estado: 'Pendiente Validación' | 'Validado' | 'Rechazado' | 'Registrado Admin';
   comprobanteUrl?: string;
@@ -35,6 +34,9 @@ interface PaymentRecord {
 
 const ESTADOS_PAGO: PaymentRecord['estado'][] = ['Pendiente Validación', 'Validado', 'Rechazado', 'Registrado Admin'];
 
+// Variable para simular errores de carga, en un futuro se conectará a lógica real
+const errorAlCargar = null; 
+
 export default function HistorialPagosView() {
   const { toast } = useToast();
   const [paymentRecords, setPaymentRecords] = useState<PaymentRecord[]>([]);
@@ -43,14 +45,15 @@ export default function HistorialPagosView() {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    // Simular carga de datos o preparación para carga real
     setIsLoading(true);
-    setTimeout(() => {
-      // En un escenario real, aquí se llamarían a las funciones para cargar datos de Firestore.
-      // Como aún no las tenemos, nos aseguramos que paymentRecords esté vacío.
-      setPaymentRecords([]); 
+    // Simulación de carga: En una implementación real, aquí se haría la llamada a Firestore.
+    // Por ahora, nos aseguramos que paymentRecords esté vacío después de la "carga".
+    const timer = setTimeout(() => {
+      setPaymentRecords([]); // Aseguramos que no haya datos mock
       setIsLoading(false);
-    }, 1000); // Simula un pequeño retraso de red
+    }, 500); // Reducido el tiempo de simulación
+
+    return () => clearTimeout(timer); // Limpieza del temporizador
   }, []);
 
   const formatTimestampToDate = (timestamp?: Timestamp, dateFormat: string = 'PPP p'): string => {
@@ -69,14 +72,12 @@ export default function HistorialPagosView() {
 
   const handleValidatePayment = (recordId: string) => {
     toast({ title: "Acción Simulada", description: `Pago ${recordId} validado (simulación).` });
-    // Aquí iría la lógica para actualizar el estado en Firestore
-    // setPaymentRecords(prev => prev.map(rec => rec.id === recordId ? {...rec, estado: 'Validado'} : rec));
+    // Lógica futura para actualizar estado en Firestore y paymentRecords localmente.
   };
 
   const handleRejectPayment = (recordId: string) => {
     toast({ title: "Acción Simulada", description: `Pago ${recordId} rechazado (simulación). Se necesitaría un modal para notas.`, variant: "destructive" });
-    // Aquí iría la lógica para actualizar el estado y notas en Firestore
-    // setPaymentRecords(prev => prev.map(rec => rec.id === recordId ? {...rec, estado: 'Rechazado', notasAdmin: 'Rechazado por admin (sim.)'} : rec));
+    // Lógica futura para actualizar estado y notas en Firestore y paymentRecords localmente.
   };
 
   const filteredRecords = useMemo(() => {
@@ -99,7 +100,6 @@ export default function HistorialPagosView() {
       default: return "secondary";
     }
   };
-
 
   return (
     <Card className="shadow-lg">
@@ -142,17 +142,17 @@ export default function HistorialPagosView() {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
             <p className="ml-3 text-muted-foreground">Cargando historial...</p>
           </div>
-        ) : errorClientes ? ( // errorClientes no está definido, se asumirá que es null por ahora o se conectará luego
+        ) : errorAlCargar ? ( 
           <div className="text-center py-10">
             <AlertCircle className="mx-auto h-12 w-12 text-destructive mb-3" />
             <p className="text-destructive font-semibold">Error al Cargar Historial</p>
-            {/* <p className="text-sm text-muted-foreground">{errorClientes}</p> */}
+            <p className="text-sm text-muted-foreground">{String(errorAlCargar)}</p>
           </div>
         ) : filteredRecords.length === 0 ? (
           <div className="text-center py-10">
             <Info className="mx-auto h-12 w-12 text-primary/50 mb-3" />
-            <p className="text-lg text-muted-foreground">No se encontraron registros.</p>
-            <p className="text-sm text-muted-foreground">Pruebe con otros filtros o términos de búsqueda, o espere a que se registren pagos.</p>
+            <p className="text-lg text-muted-foreground">No se encontraron registros de pago.</p>
+            <p className="text-sm text-muted-foreground">No hay pagos registrados o que coincidan con los filtros seleccionados.</p>
           </div>
         ) : (
           <div className="overflow-x-auto rounded-md border">
@@ -221,13 +221,7 @@ export default function HistorialPagosView() {
             </Table>
           </div>
         )}
-        {/* Aquí se podría añadir paginación si es necesario */}
       </CardContent>
     </Card>
   );
 }
-
-// Variable dummy para evitar error de no uso si fetchClientes no se implementa aún
-const errorClientes = null; 
-
-    
