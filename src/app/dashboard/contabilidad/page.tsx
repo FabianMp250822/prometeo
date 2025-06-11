@@ -10,7 +10,7 @@ import {
   BookText, 
   UserPlus, 
   CreditCard, 
-  ListOrdered, // Changed from History
+  ListOrdered,
   PlusCircle, 
   UserCog, 
   LineChart, 
@@ -40,7 +40,7 @@ interface SubmenuItem {
 const submenuItems: SubmenuItem[] = [
   { id: 'crear-cliente', label: 'Inscribir Cliente', icon: UserPlus, isPrimaryAction: true },
   { id: 'ver-pagos-cliente', label: 'Ver Pagos Cliente', icon: CreditCard },
-  { id: 'historial-pagos', label: 'Historial de Pagos', icon: ListOrdered }, // Icon updated
+  { id: 'historial-pagos', label: 'Historial de Pagos', icon: ListOrdered },
   { id: 'agregar-pago', label: 'Agregar Pago', icon: PlusCircle },
   { id: 'editar-usuario', label: 'Editar Usuario', icon: UserCog },
   { id: 'resumen-financiero', label: 'Resumen Financiero', icon: LineChart },
@@ -107,9 +107,8 @@ export default function ContabilidadPage() {
         <CardContent className="p-0">
           <nav className="flex flex-wrap items-center gap-1 border-t border-b px-3 py-2 bg-muted/30 overflow-x-auto whitespace-nowrap">
             {submenuItems.map((item) => (
-              <Link key={item.id} href={`${pathname}?view=${item.id}`} passHref legacyBehavior>
+              <Link key={item.id} href={`${pathname}?view=${item.id}`}>
                 <Button
-                  as="a" 
                   variant={item.isPrimaryAction ? 'default' : (currentView === item.id ? 'secondary' : 'ghost')}
                   size="sm"
                   className={`text-xs sm:text-sm h-auto py-1.5 px-2.5 shrink-0 ${item.isPrimaryAction ? '' : (currentView === item.id ? 'bg-primary/10 text-primary font-semibold' : 'hover:bg-accent/50')}`}
