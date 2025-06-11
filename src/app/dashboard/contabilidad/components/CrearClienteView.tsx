@@ -91,6 +91,7 @@ export default function CrearClienteView() {
   const cedulaWatched = watch("cedula");
 
   useEffect(() => {
+    // Reset verifiedCedulaForSubmit if the cedula input changes after a verification
     setVerifiedCedulaForSubmit(null);
   }, [cedulaWatched]);
 
@@ -159,12 +160,10 @@ export default function CrearClienteView() {
           const nameParts = namePart.split(" ").filter(part => part.length > 0);
           
           if (nameParts.length > 0) {
-            // Assume the last part is the name(s), rest are apellidos
-            extractedNombres = nameParts.pop() || ""; // Take the last element as nombre(s)
+            extractedNombres = nameParts.pop() || ""; 
             if (nameParts.length > 0) {
-                extractedApellidos = nameParts.join(" "); // Join remaining as apellidos
+                extractedApellidos = nameParts.join(" "); 
             } else {
-                 // If only one word was before (C.C.), it's considered nombre, apellido is empty
                 extractedApellidos = "";
             }
           }
@@ -187,10 +186,10 @@ export default function CrearClienteView() {
         setValue("telefonoFijo", data.telefonoFijo || "");
         setValue("celular", data.celular || "");
         
-        setVerifiedCedulaForSubmit(cedulaToVerify.trim());
+        setVerifiedCedulaForSubmit(cedulaToVerify.trim()); // Mark cedula as verified
         toast({ title: "Pensionado Encontrado", description: "Datos del pensionado cargados. Puede editarlos si es necesario.", variant: "default" });
       } else {
-        setVerifiedCedulaForSubmit(null);
+        setVerifiedCedulaForSubmit(null); // Ensure it's null if not found
         toast({ title: "Pensionado No Encontrado", description: "Puede continuar para registrar un nuevo cliente con esta cédula.", variant: "default" });
       }
     } catch (error) {
@@ -294,7 +293,7 @@ export default function CrearClienteView() {
       reset(); 
       setFileName(null);
       setCalculatedCuotaMensual('$0.00');
-      setVerifiedCedulaForSubmit(null);
+      setVerifiedCedulaForSubmit(null); // Reset after successful submission
 
 
     } catch (error) {
@@ -481,6 +480,8 @@ export default function CrearClienteView() {
     </Card>
   );
 }
+    
+
     
 
     
