@@ -14,7 +14,7 @@ import {
   PlusCircle, 
   UserCog, 
   LineChart, 
-  FileText,
+  FileText as FileTextIcon, // Renamed to avoid conflict with local FileText
   ChevronRight,
   Settings,
   FileSearch,
@@ -37,22 +37,20 @@ interface SubmenuItem {
   isPrimaryAction?: boolean;
 }
 
-// Actualizando para que coincida con la imagen proporcionada
 const submenuItems: SubmenuItem[] = [
-  { id: 'crear-cliente', label: 'Crear Cliente', icon: UserPlus },
+  { id: 'crear-cliente', label: 'Inscribir Cliente', icon: UserPlus, isPrimaryAction: true },
   { id: 'ver-pagos-cliente', label: 'Ver Pagos Cliente', icon: CreditCard },
   { id: 'historial-pagos', label: 'Historial de Pagos', icon: History },
-  { id: 'agregar-pago', label: 'Agregar Pago', icon: PlusCircle, isPrimaryAction: true },
+  { id: 'agregar-pago', label: 'Agregar Pago', icon: PlusCircle },
   { id: 'editar-usuario', label: 'Editar Usuario', icon: UserCog },
   { id: 'resumen-financiero', label: 'Resumen Financiero', icon: LineChart },
-  { id: 'documentos-soporte', label: 'Docs. Soporte', icon: FileText },
+  { id: 'documentos-soporte', label: 'Docs. Soporte', icon: FileTextIcon },
   { id: 'configuracion', label: 'Configuración', icon: Settings },
   { id: 'buscar-factura', label: 'Buscar Factura', icon: FileSearch },
   { id: 'estado-cuenta', label: 'Estado de Cuenta', icon: Receipt },
 ];
 
 
-// Vista por defecto para la página de Contabilidad
 const DefaultContabilidadView = () => (
   <Card className="shadow-lg border-dashed">
     <CardContent className="pt-6">
@@ -63,10 +61,10 @@ const DefaultContabilidadView = () => (
           Seleccione una opción del submenú superior para comenzar.
         </p>
         <div className="mt-8 flex justify-center">
-          <Link href="/dashboard/contabilidad?view=agregar-pago">
+          <Link href="/dashboard/contabilidad?view=crear-cliente">
             <Button size="lg">
-              <PlusCircle className="mr-2 h-5 w-5" />
-              Comenzar agregando un pago
+              <UserPlus className="mr-2 h-5 w-5" />
+              Comenzar inscribiendo un cliente
             </Button>
           </Link>
         </div>
@@ -76,7 +74,6 @@ const DefaultContabilidadView = () => (
 );
 
 
-// Mapeo de IDs de vista a componentes
 const componentMap: Record<string, React.ElementType> = {
   'crear-cliente': CrearClienteView,
   'ver-pagos-cliente': VerPagosClienteView,
@@ -85,10 +82,9 @@ const componentMap: Record<string, React.ElementType> = {
   'editar-usuario': EditarUsuarioContableView,
   'resumen-financiero': ResumenFinancieroView,
   'documentos-soporte': DocumentosSoporteView,
-  // Añadir placeholders para los nuevos botones si se crean los componentes
-  'configuracion': () => <Card><CardContent className="pt-6"><p>Vista de Configuración (Contabilidad)</p></CardContent></Card>,
-  'buscar-factura': () => <Card><CardContent className="pt-6"><p>Vista de Buscar Factura</p></CardContent></Card>,
-  'estado-cuenta': () => <Card><CardContent className="pt-6"><p>Vista de Estado de Cuenta</p></CardContent></Card>,
+  'configuracion': () => <Card><CardHeader><CardTitle>Configuración (Contabilidad)</CardTitle></CardHeader><CardContent><p>Vista de Configuración (Contabilidad)</p></CardContent></Card>,
+  'buscar-factura': () => <Card><CardHeader><CardTitle>Buscar Factura</CardTitle></CardHeader><CardContent><p>Vista de Buscar Factura</p></CardContent></Card>,
+  'estado-cuenta': () => <Card><CardHeader><CardTitle>Estado de Cuenta</CardTitle></CardHeader><CardContent><p>Vista de Estado de Cuenta</p></CardContent></Card>,
   'default': DefaultContabilidadView,
 };
 
@@ -109,20 +105,18 @@ export default function ContabilidadPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <nav className="flex flex-wrap items-center gap-1 border-t border-b px-3 py-2 bg-muted/30">
+          <nav className="flex flex-wrap items-center gap-1 border-t border-b px-3 py-2 bg-muted/30 overflow-x-auto whitespace-nowrap">
             {submenuItems.map((item) => (
-              <Link key={item.id} href={`${pathname}?view=${item.id}`}>
+              <Link key={item.id} href={`${pathname}?view=${item.id}`} passHref legacyBehavior>
                 <Button
-                  asChild
+                  as="a" // Using 'as' prop with legacyBehavior for proper styling on Link wrapper
                   variant={item.isPrimaryAction ? 'default' : (currentView === item.id ? 'secondary' : 'ghost')}
                   size="sm"
-                  className={`text-xs sm:text-sm h-auto py-1.5 px-2.5 ${item.isPrimaryAction ? '' : (currentView === item.id ? 'bg-primary/10 text-primary font-semibold' : 'hover:bg-accent/50')}`}
+                  className={`text-xs sm:text-sm h-auto py-1.5 px-2.5 shrink-0 ${item.isPrimaryAction ? '' : (currentView === item.id ? 'bg-primary/10 text-primary font-semibold' : 'hover:bg-accent/50')}`}
                 >
-                  <span>
-                    <item.icon className={`mr-1.5 h-4 w-4 ${currentView !== item.id && !item.isPrimaryAction && !(currentView === item.id && !item.isPrimaryAction) ? 'text-primary' : ''}`} />
+                    <item.icon className={`mr-1.5 h-4 w-4 shrink-0 ${currentView !== item.id && !item.isPrimaryAction && !(currentView === item.id && !item.isPrimaryAction) ? 'text-primary' : ''}`} />
                     {item.label}
-                    {item.isPrimaryAction && <ChevronRight className="ml-1 h-3 w-3" />}
-                  </span>
+                    {item.isPrimaryAction && <ChevronRight className="ml-1 h-3 w-3 shrink-0" />}
                 </Button>
               </Link>
             ))}
