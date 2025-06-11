@@ -61,7 +61,9 @@ export default function EstadoCuentaView() {
   const [currentPage, setCurrentPage] = useState(1);
   const [lastVisibleClienteDoc, setLastVisibleClienteDoc] = useState<DocumentData | null>(null);
   const [hasMoreClientes, setHasMoreClientes] = useState(true);
-  const [pageDocSnapshots, setPageDocSnapshots] = useState<Record<number, DocumentData | null>>({});
+  // pageDocSnapshots stores: pageDocSnapshots[pageNumber] = DocumentSnapshot_to_startAfter_to_fetch_that_page_number
+  // So, pageDocSnapshots[1] is null, pageDocSnapshots[2] is the last doc of page 1, etc.
+  const [pageDocSnapshots, setPageDocSnapshots] = useState<Record<number, DocumentData | null>>({ 1: null });
 
 
   const formatCurrency = (amount?: number): string => {
@@ -76,10 +78,10 @@ export default function EstadoCuentaView() {
       return `${cliente.apellidos || ''} ${cliente.nombres || ''}`.trim() || cliente.id;
   };
 
-  const fetchClientesYEstadosDeCuenta = useCallback(async (page: number, startAfterDoc: DocumentData | null = null) => {
+  const fetchClientesYEstadosDeCuenta = useCallback(async (pageToFetch: number, startAfterDocForPage: DocumentData | null = null) => {
     setIsLoading(true);
     setError(null);
-    setClientesConEstado([]);
+    // No limpiar clientesConEstado aquí para una mejor UX en paginación, se sobreescribirá.
 
     try {
       let pensionadosQuery = query(
@@ -89,12 +91,12 @@ export default function EstadoCuentaView() {
         limit(ITEMS_PER_PAGE + 1)
       );
 
-      if (page > 1 && startAfterDoc) {
+      if (pageToFetch > 1 && startAfterDocForPage) {
         pensionadosQuery = query(
           collection(db, 'pensionados'),
           orderBy('apellidos'),
           orderBy('nombres'),
-          startAfter(startAfterDoc),
+          startAfter(startAfterDocForPage),
           limit(ITEMS_PER_PAGE + 1)
         );
       }
@@ -145,22 +147,23 @@ export default function EstadoCuentaView() {
 
       setClientesConEstado(newClientesConEstado);
       
-      if (fetchedPensionadosDocs.length > ITEMS_PER_PAGE) {
-        setHasMoreClientes(true);
-        setLastVisibleClienteDoc(fetchedPensionadosDocs[ITEMS_PER_PAGE - 1]);
-      } else {
-        setHasMoreClientes(false);
-        setLastVisibleClienteDoc(null);
-      }
+      const hasMore = fetchedPensionadosDocs.length > ITEMS_PER_PAGE;
+      setHasMoreClientes(hasMore);
       
-      const newPageDocSnapshots = {...pageDocSnapshots};
-      if (page > 1 && fetchedPensionadosDocs.length > 0) {
-           newPageDocSnapshots[page] = fetchedPensionadosDocs[0];
-      } else if (page === 1) {
-          newPageDocSnapshots[1] = null; // No 'startAfter' for page 1
+      const currentLastVisible = hasMore ? fetchedPensionadosDocs[ITEMS_PER_PAGE - 1] : null;
+      setLastVisibleClienteDoc(currentLastVisible);
+      setCurrentPage(pageToFetch);
+
+      if (hasMore) {
+        setPageDocSnapshots(prevSnaps => ({
+          ...prevSnaps,
+          [pageToFetch + 1]: currentLastVisible 
+        }));
       }
-      setPageDocSnapshots(newPageDocSnapshots);
-      setCurrentPage(page);
+      if (pageToFetch === 1 && !pageDocSnapshots[1]) {
+         setPageDocSnapshots(prevSnaps => ({...prevSnaps, [1]: null}));
+      }
+
 
     } catch (err: any) {
       console.error("Error fetching data:", err);
@@ -169,32 +172,30 @@ export default function EstadoCuentaView() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast, pageDocSnapshots]);
+  }, [toast]); // pageDocSnapshots REMOVED from dependencies
 
   useEffect(() => {
+    // Fetch initial data only once
     fetchClientesYEstadosDeCuenta(1, null);
   }, [fetchClientesYEstadosDeCuenta]);
 
 
-  const handleNextPage = () => {
+  const handleNextPage = useCallback(() => {
     if (hasMoreClientes && lastVisibleClienteDoc) {
       fetchClientesYEstadosDeCuenta(currentPage + 1, lastVisibleClienteDoc);
     }
-  };
-
-  const handlePrevPage = () => {
+  }, [hasMoreClientes, lastVisibleClienteDoc, currentPage, fetchClientesYEstadosDeCuenta]);
+  
+  const handlePrevPage = useCallback(() => {
     if (currentPage > 1) {
-      const prevPageStartAfterDoc = pageDocSnapshots[currentPage -1] || null;
-      // Note: True 'previous' functionality requires fetching based on `endBefore`, 
-      // or re-fetching from the start up to the previous page's start.
-      // For simplicity here, we'll re-fetch for the previous page number,
-      // using its stored startAfterDoc if available.
-      // This is not a perfect "previous" if data changes, but often works for relatively static lists.
-      // A more robust way is to fetch up to (currentPage - 1) * ITEMS_PER_PAGE and take the last page.
-      // Or, as done here, fetch the specific page using its starting point.
-      fetchClientesYEstadosDeCuenta(currentPage - 1, prevPageStartAfterDoc);
+      const startAfterDocForPrevPage = pageDocSnapshots[currentPage - 1];
+      // Note: pageDocSnapshots[1] should be null.
+      // If pageDocSnapshots[currentPage -1] is undefined, it means we haven't stored that cursor yet (e.g. initial load)
+      // but it's okay, startAfter(undefined) is fine for Firestore.
+      fetchClientesYEstadosDeCuenta(currentPage - 1, startAfterDocForPrevPage);
     }
-  };
+  }, [currentPage, pageDocSnapshots, fetchClientesYEstadosDeCuenta]);
+
 
   return (
     <Card className="shadow-lg">
@@ -279,3 +280,4 @@ export default function EstadoCuentaView() {
     </Card>
   );
 }
+
