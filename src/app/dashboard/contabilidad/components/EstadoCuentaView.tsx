@@ -11,24 +11,23 @@ import {
   startAfter,
   getDocs,
   DocumentData,
-  Timestamp,
-  doc,
-  getDoc
+  Timestamp
 } from 'firebase/firestore';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Users, FileText, ChevronLeft, ChevronRight, AlertCircle, Info, BadgeDollarSign } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Loader2, ChevronLeft, ChevronRight, AlertCircle, Info, BadgeDollarSign, FileWarning, CheckCircle, Clock } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { format } from 'date-fns';
+import { format, isPast } from 'date-fns';
 import { es } from 'date-fns/locale';
-import type { Pensionado } from '@/contexts/PensionadoContext'; // Reutilizar la interfaz
+import type { Pensionado } from '@/contexts/PensionadoContext'; 
 
 interface PlanDePagoCuota {
   numeroCuota: number;
   montoCuota: number;
   fechaVencimientoEstimada: Timestamp;
-  estadoCuota: 'Pendiente' | 'Pagada' | 'Vencida' | string; // Permitir más estados
+  estadoCuota: 'Pendiente' | 'Pagada' | 'Vencida' | 'Enviado para Validación' | string;
 }
 
 interface Financiamiento {
@@ -37,8 +36,12 @@ interface Financiamiento {
   plazoEnMeses?: number;
   fechaCreacionAcuerdo?: Timestamp;
   planDePagos?: PlanDePagoCuota[];
+  estadoAcuerdo?: 'Activo' | 'Pagado' | 'Cancelado' | string;
   [key: string]: any;
 }
+
+type ConvenioStatus = "Pagado" | "Con Atrasos" | "Al Día" | "Activo" | "Sin Acuerdo" | "Desconocido";
+
 
 interface ClienteConEstado extends Pensionado {
   totalFinanciado?: number;
@@ -47,6 +50,8 @@ interface ClienteConEstado extends Pensionado {
   totalCuotas?: number;
   cuotasPagadas?: number;
   zonaCliente?: string;
+  estadoConvenio?: ConvenioStatus;
+  fechaUltimoAcuerdo?: Timestamp | null;
 }
 
 const ITEMS_PER_PAGE = 10;
@@ -61,8 +66,6 @@ export default function EstadoCuentaView() {
   const [currentPage, setCurrentPage] = useState(1);
   const [lastVisibleClienteDoc, setLastVisibleClienteDoc] = useState<DocumentData | null>(null);
   const [hasMoreClientes, setHasMoreClientes] = useState(true);
-  // pageDocSnapshots stores: pageDocSnapshots[pageNumber] = DocumentSnapshot_to_startAfter_to_fetch_that_page_number
-  // So, pageDocSnapshots[1] is null, pageDocSnapshots[2] is the last doc of page 1, etc.
   const [pageDocSnapshots, setPageDocSnapshots] = useState<Record<number, DocumentData | null>>({ 1: null });
 
 
@@ -78,11 +81,38 @@ export default function EstadoCuentaView() {
       return `${cliente.apellidos || ''} ${cliente.nombres || ''}`.trim() || cliente.id;
   };
 
+  const determineConvenioStatus = (financiamiento: Financiamiento | null, saldoPendiente: number, cuotasPagadas: number, totalCuotas: number): ConvenioStatus => {
+    if (!financiamiento || !financiamiento.planDePagos || financiamiento.planDePagos.length === 0) {
+      return "Sin Acuerdo";
+    }
+    if (financiamiento.estadoAcuerdo === 'Pagado' || (saldoPendiente <= 0 && cuotasPagadas === totalCuotas)) {
+      return "Pagado";
+    }
+
+    let hayAtrasos = false;
+    for (const cuota of financiamiento.planDePagos) {
+      if (cuota.estadoCuota === 'Pendiente' && cuota.fechaVencimientoEstimada && isPast(cuota.fechaVencimientoEstimada.toDate())) {
+        hayAtrasos = true;
+        break;
+      }
+    }
+
+    if (hayAtrasos) {
+      return "Con Atrasos";
+    }
+    
+    if (financiamiento.estadoAcuerdo === 'Activo') {
+        return "Al Día"; // Si está activo y no hay atrasos, está al día.
+    }
+    
+    return "Activo"; // Fallback general si está activo pero no se cumplen otras condiciones
+  };
+
+
   const fetchClientesYEstadosDeCuenta = useCallback(async (pageToFetch: number, startAfterDocForPage: DocumentData | null = null) => {
     setIsLoading(true);
     setError(null);
-    // No limpiar clientesConEstado aquí para una mejor UX en paginación, se sobreescribirá.
-
+    
     try {
       let pensionadosQuery = query(
         collection(db, 'pensionados'),
@@ -104,48 +134,56 @@ export default function EstadoCuentaView() {
       const pensionadosSnapshot = await getDocs(pensionadosQuery);
       const fetchedPensionadosDocs = pensionadosSnapshot.docs;
       
-      const newClientesConEstado: ClienteConEstado[] = [];
-
-      for (const pensionadoDoc of fetchedPensionadosDocs.slice(0, ITEMS_PER_PAGE)) {
+      const newClientesConEstadoPromises = fetchedPensionadosDocs.slice(0, ITEMS_PER_PAGE).map(async (pensionadoDoc) => {
         const pensionadoData = { id: pensionadoDoc.id, ...pensionadoDoc.data() } as Pensionado;
         let clienteEstado: ClienteConEstado = { 
           ...pensionadoData,
           zonaCliente: pensionadoData.ultimoGrupoCliente || pensionadoData.pnlCentroCosto || 'N/A',
+          totalFinanciado: 0,
+          totalPagado: 0,
+          saldoPendiente: 0,
+          totalCuotas: 0,
+          cuotasPagadas: 0,
+          estadoConvenio: "Sin Acuerdo",
+          fechaUltimoAcuerdo: null,
         };
 
         const financiamientosRef = collection(db, 'pensionados', pensionadoData.id, 'financiamientos');
         const financiamientoQuery = query(financiamientosRef, orderBy('fechaCreacionAcuerdo', 'desc'), limit(1));
         const financiamientoSnapshot = await getDocs(financiamientoQuery);
 
+        let financiamientoActivo: Financiamiento | null = null;
         if (!financiamientoSnapshot.empty) {
-          const financiamientoData = financiamientoSnapshot.docs[0].data() as Financiamiento;
-          clienteEstado.totalFinanciado = financiamientoData.salarioACancelar || 0;
+          financiamientoActivo = financiamientoSnapshot.docs[0].data() as Financiamiento;
+          clienteEstado.fechaUltimoAcuerdo = financiamientoActivo.fechaCreacionAcuerdo || null;
+          clienteEstado.totalFinanciado = financiamientoActivo.salarioACancelar || 0;
           
           let pagado = 0;
           let cuotasPg = 0;
-          if (financiamientoData.planDePagos && financiamientoData.planDePagos.length > 0) {
-            financiamientoData.planDePagos.forEach(cuota => {
-              if (cuota.estadoCuota === 'Pagada') {
+          if (financiamientoActivo.planDePagos && financiamientoActivo.planDePagos.length > 0) {
+            financiamientoActivo.planDePagos.forEach(cuota => {
+              if (cuota.estadoCuota === 'Pagada') { // Considerar "Validado" si es parte del flujo
                 pagado += cuota.montoCuota;
                 cuotasPg++;
               }
             });
+            clienteEstado.totalCuotas = financiamientoActivo.planDePagos.length;
+          } else {
+             clienteEstado.totalCuotas = financiamientoActivo.plazoEnMeses || 0;
           }
-          clienteEstado.totalPagado = pagado;
-          clienteEstado.saldoPendiente = (clienteEstado.totalFinanciado || 0) - pagado;
-          clienteEstado.totalCuotas = financiamientoData.plazoEnMeses || financiamientoData.planDePagos?.length || 0;
-          clienteEstado.cuotasPagadas = cuotasPg;
-        } else {
-          clienteEstado.totalFinanciado = 0;
-          clienteEstado.totalPagado = 0;
-          clienteEstado.saldoPendiente = 0;
-          clienteEstado.totalCuotas = 0;
-          clienteEstado.cuotasPagadas = 0;
-        }
-        newClientesConEstado.push(clienteEstado);
-      }
 
-      setClientesConEstado(newClientesConEstado);
+          clienteEstado.totalPagado = pagado;
+          clienteEstado.cuotasPagadas = cuotasPg;
+          clienteEstado.saldoPendiente = clienteEstado.totalFinanciado - pagado;
+          
+          clienteEstado.estadoConvenio = determineConvenioStatus(financiamientoActivo, clienteEstado.saldoPendiente, cuotasPg, clienteEstado.totalCuotas);
+
+        }
+        return clienteEstado;
+      });
+
+      const resolvedClientesConEstado = await Promise.all(newClientesConEstadoPromises);
+      setClientesConEstado(resolvedClientesConEstado);
       
       const hasMore = fetchedPensionadosDocs.length > ITEMS_PER_PAGE;
       setHasMoreClientes(hasMore);
@@ -164,7 +202,6 @@ export default function EstadoCuentaView() {
          setPageDocSnapshots(prevSnaps => ({...prevSnaps, [1]: null}));
       }
 
-
     } catch (err: any) {
       console.error("Error fetching data:", err);
       setError("No se pudieron cargar los datos: " + err.message);
@@ -172,10 +209,9 @@ export default function EstadoCuentaView() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]); // pageDocSnapshots REMOVED from dependencies
+  }, [toast]); 
 
   useEffect(() => {
-    // Fetch initial data only once
     fetchClientesYEstadosDeCuenta(1, null);
   }, [fetchClientesYEstadosDeCuenta]);
 
@@ -189,12 +225,26 @@ export default function EstadoCuentaView() {
   const handlePrevPage = useCallback(() => {
     if (currentPage > 1) {
       const startAfterDocForPrevPage = pageDocSnapshots[currentPage - 1];
-      // Note: pageDocSnapshots[1] should be null.
-      // If pageDocSnapshots[currentPage -1] is undefined, it means we haven't stored that cursor yet (e.g. initial load)
-      // but it's okay, startAfter(undefined) is fine for Firestore.
       fetchClientesYEstadosDeCuenta(currentPage - 1, startAfterDocForPrevPage);
     }
   }, [currentPage, pageDocSnapshots, fetchClientesYEstadosDeCuenta]);
+
+  const getStatusBadge = (status: ConvenioStatus | undefined) => {
+    switch (status) {
+      case "Pagado":
+        return <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white"><CheckCircle className="mr-1 h-3.5 w-3.5" />{status}</Badge>;
+      case "Con Atrasos":
+        return <Badge variant="destructive"><FileWarning className="mr-1 h-3.5 w-3.5" />{status}</Badge>;
+      case "Al Día":
+        return <Badge variant="secondary" className="text-blue-600 border-blue-500"><Clock className="mr-1 h-3.5 w-3.5" />{status}</Badge>;
+      case "Sin Acuerdo":
+        return <Badge variant="outline">{status}</Badge>;
+      case "Activo":
+         return <Badge variant="outline" className="text-primary border-primary">{status}</Badge>;
+      default:
+        return <Badge variant="outline">Desconocido</Badge>;
+    }
+  };
 
 
   return (
@@ -202,10 +252,10 @@ export default function EstadoCuentaView() {
       <CardHeader>
         <CardTitle className="flex items-center text-xl font-headline text-primary">
           <BadgeDollarSign className="mr-3 h-6 w-6" />
-          Estado de Cuenta General
+          Estado de Cuenta General de Clientes
         </CardTitle>
         <CardDescription>
-          Resumen del estado financiero de los clientes y sus acuerdos de pago.
+          Resumen consolidado del estado financiero de los convenios de todos los clientes.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -238,10 +288,12 @@ export default function EstadoCuentaView() {
                   <TableRow>
                     <TableHead>Cliente (C.C.)</TableHead>
                     <TableHead>Zona/Grupo</TableHead>
-                    <TableHead className="text-right">Total Financiado</TableHead>
+                    <TableHead>Últ. Acuerdo</TableHead>
+                    <TableHead className="text-right">Total Convenio</TableHead>
                     <TableHead className="text-right">Total Pagado</TableHead>
                     <TableHead className="text-right">Saldo Pendiente</TableHead>
-                    <TableHead className="text-center">Cuotas (Pagadas/Total)</TableHead>
+                    <TableHead className="text-center">Progreso Cuotas</TableHead>
+                    <TableHead className="text-center">Estado Convenio</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -252,13 +304,19 @@ export default function EstadoCuentaView() {
                         <div className="text-xs text-muted-foreground">{cliente.id}</div>
                       </TableCell>
                       <TableCell>{cliente.zonaCliente || 'N/A'}</TableCell>
+                       <TableCell>
+                        {cliente.fechaUltimoAcuerdo ? format(cliente.fechaUltimoAcuerdo.toDate(), 'dd MMM yyyy', { locale: es }) : 'N/A'}
+                      </TableCell>
                       <TableCell className="text-right">{formatCurrency(cliente.totalFinanciado)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(cliente.totalPagado)}</TableCell>
                       <TableCell className="text-right font-semibold">{formatCurrency(cliente.saldoPendiente)}</TableCell>
                       <TableCell className="text-center">
                         {cliente.totalCuotas !== undefined && cliente.totalCuotas > 0 
                           ? `${cliente.cuotasPagadas || 0} de ${cliente.totalCuotas}`
-                          : 'N/A'}
+                          : cliente.estadoConvenio === "Sin Acuerdo" ? 'N/A' : '0 de 0'}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {getStatusBadge(cliente.estadoConvenio)}
                       </TableCell>
                     </TableRow>
                   ))}
