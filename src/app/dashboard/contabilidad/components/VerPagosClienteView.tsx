@@ -71,6 +71,8 @@ export default function VerPagosClienteView() {
   const [lastVisibleClienteDoc, setLastVisibleClienteDoc] = useState<DocumentData | null>(null);
   const [hasMoreClientes, setHasMoreClientes] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageDocSnapshots, setPageDocSnapshots] = useState<Record<number, DocumentData | null>>({ 1: null });
+
 
   const [selectedCliente, setSelectedCliente] = useState<Pensionado | null>(null);
   const [financiamientos, setFinanciamientos] = useState<Financiamiento[]>([]);
@@ -78,12 +80,18 @@ export default function VerPagosClienteView() {
   const [isLoadingFinanciamientos, setIsLoadingFinanciamientos] = useState(false);
   const [errorFinanciamientos, setErrorFinanciamientos] = useState<string | null>(null);
 
+  const [totalConvenio, setTotalConvenio] = useState<number>(0);
+  const [totalCancelado, setTotalCancelado] = useState<number>(0);
+
   const formatTimestampToDate = (timestamp?: Timestamp, dateFormat: string = 'PPP'): string => {
     if (!timestamp) return 'N/A';
     try {
-      return format(timestamp.toDate(), dateFormat, { locale: es });
+      const date = timestamp.toDate();
+      // Check if date is valid before formatting
+      if (isNaN(date.getTime())) return 'Fecha Inválida';
+      return format(date, dateFormat, { locale: es });
     } catch (e) {
-      console.warn("Error formatting timestamp:", e);
+      console.warn("Error formatting timestamp:", timestamp, e);
       return 'Fecha inválida';
     }
   };
@@ -99,9 +107,9 @@ export default function VerPagosClienteView() {
     try {
       let q = query(
         collection(db, 'pensionados'),
-        orderBy('apellidos'), // O el campo por el que quieras ordenar por defecto
+        orderBy('apellidos'), 
         orderBy('nombres'),
-        limit(CLIENTES_PER_PAGE + 1) // Fetch one extra to check if there's a next page
+        limit(CLIENTES_PER_PAGE + 1) 
       );
 
       if (page > 1 && startAfterDoc) {
@@ -112,30 +120,30 @@ export default function VerPagosClienteView() {
           startAfter(startAfterDoc),
           limit(CLIENTES_PER_PAGE + 1)
         );
-      } else if (page === 1) {
-        // Reset last visible doc for first page
-        setLastVisibleClienteDoc(null);
       }
       
       const querySnapshot = await getDocs(q);
-      const fetchedClientes: Pensionado[] = [];
-      querySnapshot.docs.forEach(docSnap => {
-        fetchedClientes.push({ id: docSnap.id, ...docSnap.data() } as Pensionado);
-      });
-
-      if (fetchedClientes.length > CLIENTES_PER_PAGE) {
-        setHasMoreClientes(true);
-        setLastVisibleClienteDoc(querySnapshot.docs[CLIENTES_PER_PAGE -1]); 
-        setClientes(fetchedClientes.slice(0, CLIENTES_PER_PAGE));
-      } else {
-        setHasMoreClientes(false);
-        setLastVisibleClienteDoc(null);
-        setClientes(fetchedClientes);
-      }
+      const fetchedClientesDocs = querySnapshot.docs;
+      const clientesData = fetchedClientesDocs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Pensionado));
       
+      setClientes(clientesData.slice(0, CLIENTES_PER_PAGE));
+      
+      const hasMore = fetchedClientesDocs.length > CLIENTES_PER_PAGE;
+      setHasMoreClientes(hasMore);
+      
+      const currentLastVisible = hasMore ? fetchedClientesDocs[CLIENTES_PER_PAGE -1] : null;
+      setLastVisibleClienteDoc(currentLastVisible);
       setCurrentPage(page);
 
-      if (page === 1 && fetchedClientes.length === 0) {
+      if (hasMore) {
+        setPageDocSnapshots(prevSnaps => ({ ...prevSnaps, [page + 1]: currentLastVisible }));
+      }
+      if (page === 1 && !pageDocSnapshots[1] && clientesData.length > 0) {
+         setPageDocSnapshots(prevSnaps => ({...prevSnaps, [1]: null}));
+      }
+
+
+      if (page === 1 && clientesData.length === 0) {
         toast({ title: "Sin Clientes", description: "No se encontraron clientes registrados.", variant: "default" });
       }
 
@@ -146,27 +154,24 @@ export default function VerPagosClienteView() {
     } finally {
       setIsLoadingClientes(false);
     }
-  }, [toast]);
+  }, [toast]); // pageDocSnapshots removed
 
   useEffect(() => {
-    fetchClientes(1);
+    fetchClientes(1, null);
   }, [fetchClientes]);
 
-  const handleNextPage = () => {
+  const handleNextPage = useCallback(() => {
     if (hasMoreClientes && lastVisibleClienteDoc) {
       fetchClientes(currentPage + 1, lastVisibleClienteDoc);
     }
-  };
+  }, [hasMoreClientes, lastVisibleClienteDoc, currentPage, fetchClientes]);
   
-  const handlePrevPage = () => {
-    // Firestore pagination doesn't directly support "previous" easily without storing firstVisible docs per page.
-    // For simplicity, this will just go back to page 1 if not on page 1.
-    // A more robust solution would store page snapshots.
+  const handlePrevPage = useCallback(() => {
     if (currentPage > 1) {
-       toast({ title: "Navegación", description: "Volviendo a la primera página. Paginación 'anterior' completa requiere más configuración.", variant: "default"});
-       fetchClientes(1); 
+       const startAfterDocForPrevPage = pageDocSnapshots[currentPage - 1];
+       fetchClientes(currentPage - 1, startAfterDocForPrevPage); 
     }
-  };
+  },[currentPage, pageDocSnapshots, fetchClientes]);
 
 
   const handleSelectCliente = async (cliente: Pensionado) => {
@@ -175,6 +180,8 @@ export default function VerPagosClienteView() {
     setErrorFinanciamientos(null);
     setFinanciamientos([]);
     setSelectedFinanciamiento(null);
+    setTotalConvenio(0);
+    setTotalCancelado(0);
 
     try {
       const financiamientosRef = collection(db, 'pensionados', cliente.id, 'financiamientos');
@@ -189,10 +196,25 @@ export default function VerPagosClienteView() {
       setFinanciamientos(fetchedFinanciamientos);
 
       if (fetchedFinanciamientos.length > 0) {
-        setSelectedFinanciamiento(fetchedFinanciamientos[0]); // Seleccionar el más reciente por defecto
-        toast({ title: "Financiamientos Cargados", description: `Se encontraron ${fetchedFinanciamientos.length} acuerdo(s) para ${cliente.nombres || cliente.id}. Mostrando el más reciente.`, variant: "default"});
+        const financiamientoSeleccionado = fetchedFinanciamientos[0]; // Seleccionar el más reciente por defecto
+        setSelectedFinanciamiento(financiamientoSeleccionado);
+        
+        const convenio = financiamientoSeleccionado.salarioACancelar || 0;
+        setTotalConvenio(convenio);
+
+        let cancelado = 0;
+        if (financiamientoSeleccionado.planDePagos) {
+          financiamientoSeleccionado.planDePagos.forEach(cuota => {
+            if (cuota.estadoCuota === 'Pagada') {
+              cancelado += cuota.montoCuota;
+            }
+          });
+        }
+        setTotalCancelado(cancelado);
+        
+        toast({ title: "Financiamientos Cargados", description: `Se encontraron ${fetchedFinanciamientos.length} acuerdo(s). Mostrando el más reciente.`, variant: "default"});
       } else {
-        toast({ title: "Sin Financiamientos", description: `No se encontraron acuerdos de financiamiento para ${cliente.nombres || cliente.id}.`, variant: "default" });
+        toast({ title: "Sin Financiamientos", description: `No se encontraron acuerdos de financiamiento.`, variant: "default" });
       }
     } catch (err: any) {
       console.error("Error fetching financiamientos:", err);
@@ -211,10 +233,19 @@ export default function VerPagosClienteView() {
   };
 
   const isCuotaAtrasada = (cuota: PlanDePagoCuota): boolean => {
-    return cuota.estadoCuota === 'Pendiente' && cuota.fechaVencimientoEstimada && isPast(cuota.fechaVencimientoEstimada.toDate());
+    if (cuota.estadoCuota !== 'Pendiente' || !cuota.fechaVencimientoEstimada) return false;
+    try {
+        const fechaVencimiento = cuota.fechaVencimientoEstimada.toDate();
+        if (isNaN(fechaVencimiento.getTime())) return false; // Invalid date from timestamp
+        return isPast(fechaVencimiento) && !cuota.fechaPagoReal;
+    } catch (e) {
+        console.warn("Could not determine if cuota is atrasada", cuota, e);
+        return false;
+    }
   };
   
-  const getNombreCompletoCliente = (cliente: Pensionado): string => {
+  const getNombreCompletoCliente = (cliente: Pensionado | null): string => {
+      if (!cliente) return 'N/A';
       if (cliente.empleado && cliente.empleado.includes('(C.C.')) {
         return cliente.empleado.substring(0, cliente.empleado.indexOf('(C.C.')).trim();
       }
@@ -231,7 +262,7 @@ export default function VerPagosClienteView() {
             Clientes Registrados
           </CardTitle>
           <CardDescription>
-            Seleccione un cliente para ver sus acuerdos de financiamiento y detalles de pago.
+            Seleccione un cliente para ver su estado de cuenta y plan de pagos detallado.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -276,7 +307,7 @@ export default function VerPagosClienteView() {
                         <TableCell>{cliente.ultimoGrupoCliente || 'N/A'}</TableCell>
                         <TableCell>
                           <Button variant="outline" size="sm" onClick={() => handleSelectCliente(cliente)}>
-                            Ver Pagos
+                            Ver Estado de Cuenta
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -304,18 +335,18 @@ export default function VerPagosClienteView() {
   return (
     <Card className="shadow-lg">
       <CardHeader>
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
           <div>
             <CardTitle className="flex items-center text-xl font-headline text-primary">
               <FileText className="mr-3 h-6 w-6" />
-              Financiamientos de: {getNombreCompletoCliente(selectedCliente)} (C.C. {selectedCliente.id})
+              Estado de Cuenta: {getNombreCompletoCliente(selectedCliente)} (C.C. {selectedCliente.id})
             </CardTitle>
             <CardDescription>
-              {selectedFinanciamiento ? `Mostrando detalles del acuerdo creado el ${formatTimestampToDate(selectedFinanciamiento.fechaCreacionAcuerdo)}.` : "Seleccione un acuerdo o cargando..."}
+              {selectedFinanciamiento ? `Acuerdo del ${formatTimestampToDate(selectedFinanciamiento.fechaCreacionAcuerdo)}.` : "Cargando o sin acuerdo seleccionado."}
             </CardDescription>
           </div>
-          <Button variant="outline" onClick={handleVolverALista}>
-            <ChevronLeft className="mr-2 h-4 w-4" /> Volver a la Lista
+          <Button variant="outline" onClick={handleVolverALista} className="mt-2 sm:mt-0">
+            <ChevronLeft className="mr-2 h-4 w-4" /> Volver a Lista de Clientes
           </Button>
         </div>
       </CardHeader>
@@ -323,13 +354,13 @@ export default function VerPagosClienteView() {
         {isLoadingFinanciamientos && (
           <div className="flex justify-center items-center py-10">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="ml-3 text-muted-foreground">Cargando financiamientos...</p>
+            <p className="ml-3 text-muted-foreground">Cargando detalles del acuerdo...</p>
           </div>
         )}
         {errorFinanciamientos && !isLoadingFinanciamientos && (
            <div className="text-center py-10">
               <AlertCircle className="mx-auto h-12 w-12 text-destructive mb-3" />
-              <p className="text-destructive font-semibold">Error al Cargar Financiamientos</p>
+              <p className="text-destructive font-semibold">Error al Cargar Acuerdo</p>
               <p className="text-sm text-muted-foreground">{errorFinanciamientos}</p>
               <Button onClick={() => selectedCliente && handleSelectCliente(selectedCliente)} variant="outline" className="mt-4">Reintentar</Button>
             </div>
@@ -342,27 +373,23 @@ export default function VerPagosClienteView() {
             </div>
         )}
 
-        {/* Aquí podrías añadir un selector si hay múltiples financiamientos */}
-        {/* Por ahora, se muestra el 'selectedFinanciamiento' (que es el más reciente) */}
-
         {selectedFinanciamiento && !isLoadingFinanciamientos && (
           <div className="space-y-6 mt-4">
             <Card className="bg-muted/30">
-              <CardHeader className="pb-2">
+              <CardHeader className="pb-3 pt-4">
                 <CardTitle className="text-lg flex items-center">
                     <CircleDollarSign className="mr-2 h-5 w-5 text-primary"/>
                     Resumen del Acuerdo
                 </CardTitle>
               </CardHeader>
-              <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-2 text-sm pt-2">
-                <div><strong>Monto Total a Cancelar:</strong> {formatCurrency(selectedFinanciamiento.salarioACancelar)}</div>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3 text-sm pt-0">
+                <div><strong>Monto Total Convenio:</strong> {formatCurrency(selectedFinanciamiento.salarioACancelar)}</div>
                 <div><strong>Plazo:</strong> {selectedFinanciamiento.plazoEnMeses} meses</div>
                 <div><strong>Cuota Mensual:</strong> {formatCurrency(selectedFinanciamiento.cuotaMensualCalculada)}</div>
                 <div><strong>Estado Acuerdo:</strong> <Badge variant={selectedFinanciamiento.estadoAcuerdo === 'Activo' ? "default" : "secondary"}>{selectedFinanciamiento.estadoAcuerdo || "N/A"}</Badge></div>
                 <div><strong>Grupo:</strong> {selectedFinanciamiento.grupoCliente || 'N/A'}</div>
-                <div><strong>Creado el:</strong> {formatTimestampToDate(selectedFinanciamiento.fechaCreacionAcuerdo)}</div>
                  {selectedFinanciamiento.convenioGeneralPagoUrl && (
-                  <div className="md:col-span-2 lg:col-span-1">
+                  <div className="md:col-span-1">
                     <Button variant="link" asChild className="p-0 h-auto text-sm">
                       <a href={selectedFinanciamiento.convenioGeneralPagoUrl} target="_blank" rel="noopener noreferrer">
                         Ver Convenio General
@@ -374,60 +401,66 @@ export default function VerPagosClienteView() {
             </Card>
 
             <Card>
-              <CardHeader>
+              <CardHeader className="pb-3 pt-4">
                 <CardTitle className="text-lg flex items-center">
                     <ListChecks className="mr-2 h-5 w-5 text-primary"/>
-                    Plan de Pagos
+                    Detalle de Cuotas
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-0">
                 {selectedFinanciamiento.planDePagos && selectedFinanciamiento.planDePagos.length > 0 ? (
                   <div className="overflow-x-auto rounded-md border">
                     <Table>
                       <TableHeader className="bg-muted/50">
                         <TableRow>
-                          <TableHead># Cuota</TableHead>
+                          <TableHead className="text-center"># Cuota</TableHead>
                           <TableHead className="text-right">Monto</TableHead>
-                          <TableHead>Fecha Vencimiento</TableHead>
+                          <TableHead>Vencimiento</TableHead>
                           <TableHead>Estado</TableHead>
                           <TableHead>Observación</TableHead>
-                           <TableHead>Pago Realizado</TableHead>
-                          {/* Podrías añadir acciones como "Registrar Pago" aquí en el futuro */}
+                          <TableHead>Fecha Pago Real</TableHead>
+                          <TableHead>Comprobante</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {selectedFinanciamiento.planDePagos.map((cuota) => (
+                        {selectedFinanciamiento.planDePagos.sort((a,b) => a.numeroCuota - b.numeroCuota).map((cuota) => (
                           <TableRow key={cuota.numeroCuota}>
-                            <TableCell>{cuota.numeroCuota}</TableCell>
+                            <TableCell className="text-center">{cuota.numeroCuota}</TableCell>
                             <TableCell className="text-right">{formatCurrency(cuota.montoCuota)}</TableCell>
                             <TableCell>{formatTimestampToDate(cuota.fechaVencimientoEstimada)}</TableCell>
                             <TableCell>
                               <Badge 
                                 variant={
                                   cuota.estadoCuota === 'Pagada' ? 'default' : 
-                                  (isCuotaAtrasada(cuota) ? 'destructive' : 'secondary')
+                                  (isCuotaAtrasada(cuota) ? 'destructive' : 
+                                  (cuota.estadoCuota === 'Enviado para Validación' ? 'outline' : 'secondary'))
                                 }
                                 className="capitalize"
                               >
-                                {cuota.estadoCuota}
+                                {isCuotaAtrasada(cuota) ? 'Vencida' : cuota.estadoCuota}
                               </Badge>
                             </TableCell>
                             <TableCell>
-                              {isCuotaAtrasada(cuota) && (
-                                <Badge variant="outline" className="text-destructive border-destructive">
-                                  <CalendarClock className="mr-1 h-3 w-3" /> Atrasada
-                                </Badge>
-                              )}
-                              {!isCuotaAtrasada(cuota) && cuota.estadoCuota === 'Pendiente' && '-'}
-                              {cuota.notasCuota && <span className="block text-xs text-muted-foreground">{cuota.notasCuota}</span>}
+                              {cuota.notasCuota ? 
+                                <span className="block text-xs text-muted-foreground" title={cuota.notasCuota}>
+                                  {cuota.notasCuota.length > 30 ? cuota.notasCuota.substring(0,27) + '...' : cuota.notasCuota}
+                                </span> 
+                                : isCuotaAtrasada(cuota) ? 
+                                  <Badge variant="outline" className="text-destructive border-destructive font-normal text-xs py-0.5 px-1.5">
+                                      <CalendarClock className="mr-1 h-3 w-3" /> Atrasada
+                                  </Badge> 
+                                  : '-'
+                              }
                             </TableCell>
                              <TableCell>
                                 {cuota.fechaPagoReal ? formatTimestampToDate(cuota.fechaPagoReal) : 'N/P'}
-                                {cuota.comprobanteCuotaUrl && (
-                                  <Button variant="link" size="sm" asChild className="p-0 h-auto ml-1 text-xs">
-                                     <a href={cuota.comprobanteCuotaUrl} target="_blank" rel="noopener noreferrer">(Ver Comp.)</a>
+                             </TableCell>
+                             <TableCell>
+                                {cuota.comprobanteCuotaUrl ? (
+                                  <Button variant="link" size="sm" asChild className="p-0 h-auto text-xs">
+                                     <a href={cuota.comprobanteCuotaUrl} target="_blank" rel="noopener noreferrer">Ver</a>
                                   </Button>
-                                )}
+                                ) : (cuota.estadoCuota === 'Pagada' ? 'N/D' : '-')}
                              </TableCell>
                           </TableRow>
                         ))}
@@ -435,9 +468,23 @@ export default function VerPagosClienteView() {
                     </Table>
                   </div>
                 ) : (
-                  <p className="text-muted-foreground">No hay un plan de pagos detallado para este acuerdo.</p>
+                  <p className="text-muted-foreground text-center py-4">No hay un plan de pagos detallado para este acuerdo.</p>
                 )}
               </CardContent>
+               <CardFooter className="flex flex-col sm:flex-row justify-end items-center gap-4 sm:gap-8 pt-4 border-t bg-muted/20 p-4">
+                  <div className="text-right">
+                      <p className="text-xs text-muted-foreground">Total del Convenio</p>
+                      <p className="text-lg font-semibold text-foreground">{formatCurrency(totalConvenio)}</p>
+                  </div>
+                  <div className="text-right">
+                      <p className="text-xs text-muted-foreground">Total Cancelado</p>
+                      <p className="text-lg font-semibold text-green-600">{formatCurrency(totalCancelado)}</p>
+                  </div>
+                  <div className="text-right">
+                      <p className="text-xs text-muted-foreground">Saldo Pendiente</p>
+                      <p className="text-lg font-bold text-destructive">{formatCurrency(totalConvenio - totalCancelado)}</p>
+                  </div>
+              </CardFooter>
             </Card>
           </div>
         )}
