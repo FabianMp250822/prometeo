@@ -13,12 +13,13 @@ import {
   ListOrdered,
   PlusCircle, 
   UserCog, 
-  LineChart as LineChartIcon, // Renamed to avoid conflict
+  LineChart as LineChartIcon,
   FileText as FileTextIcon,
   ChevronRight,
   Settings,
   FileSearch,
-  Receipt
+  Receipt, // Icono para Estado de Cuenta
+  BadgeDollarSign // Icono para Ver Pagos Cliente, si se quiere cambiar
 } from 'lucide-react';
 
 // Importar los componentes de las vistas de los submódulos
@@ -29,6 +30,7 @@ import AgregarPagoView from './components/AgregarPagoView';
 import EditarUsuarioContableView from './components/EditarUsuarioContableView';
 import ResumenFinancieroView from './components/ResumenFinancieroView';
 import DocumentosSoporteView from './components/DocumentosSoporteView';
+import EstadoCuentaView from './components/EstadoCuentaView'; // Importar el nuevo componente
 
 interface SubmenuItem {
   id: string;
@@ -39,15 +41,15 @@ interface SubmenuItem {
 
 const submenuItems: SubmenuItem[] = [
   { id: 'crear-cliente', label: 'Inscribir Cliente', icon: UserPlus, isPrimaryAction: true },
-  { id: 'ver-pagos-cliente', label: 'Ver Pagos Cliente', icon: CreditCard },
-  { id: 'historial-pagos', label: 'Historial de Pagos', icon: ListOrdered },
-  { id: 'agregar-pago', label: 'Agregar Pago', icon: PlusCircle },
-  { id: 'resumen-financiero', label: 'Resumen Financiero', icon: LineChartIcon }, // Corrected icon
+  { id: 'ver-pagos-cliente', label: 'Plan de Pagos Cliente', icon: CreditCard }, // Renombrado para claridad
+  { id: 'historial-pagos', label: 'Historial/Validación', icon: ListOrdered },
+  { id: 'agregar-pago', label: 'Registrar Pago Cuota', icon: PlusCircle }, // Renombrado para claridad
+  { id: 'estado-cuenta', label: 'Estado de Cuenta', icon: Receipt }, // Nuevo ítem
+  { id: 'resumen-financiero', label: 'Resumen Financiero', icon: LineChartIcon },
   { id: 'documentos-soporte', label: 'Docs. Soporte', icon: FileTextIcon },
   { id: 'editar-usuario', label: 'Editar Usuario', icon: UserCog },
   { id: 'configuracion', label: 'Configuración', icon: Settings },
   { id: 'buscar-factura', label: 'Buscar Factura', icon: FileSearch },
-  { id: 'estado-cuenta', label: 'Estado de Cuenta', icon: Receipt },
 ];
 
 
@@ -82,9 +84,9 @@ const componentMap: Record<string, React.ElementType> = {
   'editar-usuario': EditarUsuarioContableView,
   'resumen-financiero': ResumenFinancieroView,
   'documentos-soporte': DocumentosSoporteView,
+  'estado-cuenta': EstadoCuentaView, // Mapear el nuevo componente
   'configuracion': () => <Card><CardHeader><CardTitle>Configuración (Contabilidad)</CardTitle></CardHeader><CardContent><p>Vista de Configuración (Contabilidad)</p></CardContent></Card>,
   'buscar-factura': () => <Card><CardHeader><CardTitle>Buscar Factura</CardTitle></CardHeader><CardContent><p>Vista de Buscar Factura</p></CardContent></Card>,
-  'estado-cuenta': () => <Card><CardHeader><CardTitle>Estado de Cuenta</CardTitle></CardHeader><CardContent><p>Vista de Estado de Cuenta</p></CardContent></Card>,
   'default': DefaultContabilidadView,
 };
 
