@@ -5,7 +5,7 @@ import React, { useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { PlusCircle, Save, UploadCloud, CalendarIcon, Loader2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 // import { db, storage } from '@/lib/firebase'; // Uncomment when connecting to Firebase
 // import { doc, setDoc, collection, addDoc, Timestamp } from 'firebase/firestore';
 // import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
