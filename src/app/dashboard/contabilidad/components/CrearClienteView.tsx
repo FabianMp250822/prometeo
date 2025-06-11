@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { db, storage } from '@/lib/firebase';
 import { doc, getDoc, setDoc, collection, addDoc, Timestamp } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { addMonths, setDate } from 'date-fns';
 
 const predefinedGrupos = [
   { value: 'SUPRIMIDOS', label: 'SUPRIMIDOS' },
@@ -83,7 +84,6 @@ export default function CrearClienteView() {
   });
 
   const selectedGrupo = watch("grupo");
-  const nuevoGrupoWatched = watch("nuevoGrupo");
   const salarioACancelarWatched = watch("salarioACancelar");
   const plazoEnMesesWatched = watch("plazoEnMeses");
   const aporteCostosOperativosWatched = watch("aporteCostosOperativos");
@@ -91,7 +91,6 @@ export default function CrearClienteView() {
   const cedulaWatched = watch("cedula");
 
   useEffect(() => {
-    // Reset verifiedCedulaForSubmit if the cedula input changes after a verification
     setVerifiedCedulaForSubmit(null);
   }, [cedulaWatched]);
 
@@ -186,10 +185,10 @@ export default function CrearClienteView() {
         setValue("telefonoFijo", data.telefonoFijo || "");
         setValue("celular", data.celular || "");
         
-        setVerifiedCedulaForSubmit(cedulaToVerify.trim()); // Mark cedula as verified
+        setVerifiedCedulaForSubmit(cedulaToVerify.trim());
         toast({ title: "Pensionado Encontrado", description: "Datos del pensionado cargados. Puede editarlos si es necesario.", variant: "default" });
       } else {
-        setVerifiedCedulaForSubmit(null); // Ensure it's null if not found
+        setVerifiedCedulaForSubmit(null);
         toast({ title: "Pensionado No Encontrado", description: "Puede continuar para registrar un nuevo cliente con esta cédula.", variant: "default" });
       }
     } catch (error) {
@@ -220,14 +219,14 @@ export default function CrearClienteView() {
       });
     }
 
-    let convenioPagoUrl: string | null = null;
+    let convenioGeneralPagoUrl: string | null = null;
     if (data.convenioPago && data.convenioPago.length > 0) {
       const file = data.convenioPago[0];
-      const fileStorageRef = storageRef(storage, `convenios_pago/${data.cedula.trim()}/${Date.now()}_${file.name}`);
+      const fileStorageRef = storageRef(storage, `convenios_pago_general/${data.cedula.trim()}/${Date.now()}_${file.name}`);
       try {
         await uploadBytes(fileStorageRef, file);
-        convenioPagoUrl = await getDownloadURL(fileStorageRef);
-        toast({ title: "Archivo Subido", description: "Convenio de pago cargado exitosamente." });
+        convenioGeneralPagoUrl = await getDownloadURL(fileStorageRef);
+        toast({ title: "Archivo Subido", description: "Convenio general de pago cargado exitosamente." });
       } catch (error) {
         console.error("Error subiendo archivo:", error);
         toast({ title: "Error de Archivo", description: "No se pudo subir el convenio de pago.", variant: "destructive" });
@@ -241,6 +240,7 @@ export default function CrearClienteView() {
     const plazoNum = Number(data.plazoEnMeses);
     const cuotaMensualNum = parseFloat(calculatedCuotaMensual.replace(/[$.]/g, '').replace(',', '.')) || 0;
     const currentCedulaTrimmed = data.cedula.trim();
+    const fechaActual = Timestamp.now();
 
     const pensionadoDataToSave: any = {
       nombres: data.nombres.trim(),
@@ -256,51 +256,75 @@ export default function CrearClienteView() {
       ultimoMultiplicadorSalarioMinimo: multNum,
       ultimoSalarioACancelar: salarioNum,
       ultimoPlazoEnMeses: plazoNum,
-      ultimoConvenioPagoUrl: convenioPagoUrl, 
-      fechaUltimaActualizacion: Timestamp.now(),
+      ultimoConvenioGeneralUrl: convenioGeneralPagoUrl, 
+      fechaUltimaActualizacion: fechaActual,
     };
 
-    // Add origenRegistro if it's a new client or cedula changed after verification
     if (verifiedCedulaForSubmit === null || verifiedCedulaForSubmit !== currentCedulaTrimmed) {
       pensionadoDataToSave.origenRegistro = "INSCRIPCION_CLIENTE";
     }
-
-    const procesoPagoData = {
-      aporteCostosOperativos: aporteNum,
-      grupoCliente: grupoFinal,
-      multiplicadorSalarioMinimo: multNum,
-      salarioACancelar: salarioNum,
-      plazoEnMeses: plazoNum,
-      cuotaMensualCalculada: cuotaMensualNum,
-      convenioPagoUrl: convenioPagoUrl,
-      fechaCreacionProceso: Timestamp.now(),
-      estadoProceso: 'Pendiente', 
-      cedulaCliente: currentCedulaTrimmed, 
-      nombreCliente: `${data.nombres.trim()} ${data.apellidos.trim()}`,
-    };
 
     try {
       const pensionadoDocRef = doc(db, "pensionados", currentCedulaTrimmed);
       await setDoc(pensionadoDocRef, pensionadoDataToSave, { merge: true });
 
-      const pagosProcesosColRef = collection(db, "pensionados", currentCedulaTrimmed, "pagos_procesos");
-      await addDoc(pagosProcesosColRef, procesoPagoData);
+      if (plazoNum > 0 && cuotaMensualNum > 0) {
+        const planDePagos = [];
+        const fechaInicioAcuerdo = fechaActual.toDate();
 
-      toast({
-        title: "Cliente Registrado Exitosamente",
-        description: `El cliente ${data.nombres} ${data.apellidos} ha sido guardado y el proceso de pago iniciado.`,
-      });
+        for (let i = 1; i <= plazoNum; i++) {
+          let fechaVencimiento = addMonths(fechaInicioAcuerdo, i);
+          fechaVencimiento = setDate(fechaVencimiento, 5); // Establecer el día 5 del mes
+
+          planDePagos.push({
+            numeroCuota: i,
+            montoCuota: cuotaMensualNum,
+            fechaVencimientoEstimada: Timestamp.fromDate(fechaVencimiento),
+            estadoCuota: 'Pendiente',
+            comprobanteCuotaUrl: null,
+            fechaPagoReal: null,
+            notasCuota: null,
+          });
+        }
+
+        const financiamientoData = {
+          aporteCostosOperativos: aporteNum,
+          grupoCliente: grupoFinal,
+          multiplicadorSalarioMinimo: multNum,
+          salarioACancelar: salarioNum,
+          plazoEnMeses: plazoNum,
+          cuotaMensualCalculada: cuotaMensualNum,
+          convenioGeneralPagoUrl: convenioGeneralPagoUrl,
+          fechaCreacionAcuerdo: fechaActual,
+          estadoAcuerdo: 'Activo',
+          planDePagos: planDePagos,
+          cedulaCliente: currentCedulaTrimmed, 
+          nombreCliente: `${data.nombres.trim()} ${data.apellidos.trim()}`,
+        };
+        
+        const financiamientosColRef = collection(db, "pensionados", currentCedulaTrimmed, "financiamientos");
+        await addDoc(financiamientosColRef, financiamientoData);
+        toast({
+          title: "Cliente y Financiamiento Registrados",
+          description: `El cliente ${data.nombres} ${data.apellidos} y su plan de financiamiento han sido guardados.`,
+        });
+      } else {
+        toast({
+          title: "Cliente Registrado (Sin Financiamiento)",
+          description: `El cliente ${data.nombres} ${data.apellidos} ha sido guardado. No se generó plan de financiamiento (plazo 0 o cuota 0).`,
+        });
+      }
+
       reset(); 
       setFileName(null);
       setCalculatedCuotaMensual('$0.00');
-      setVerifiedCedulaForSubmit(null); // Reset after successful submission
-
+      setVerifiedCedulaForSubmit(null);
 
     } catch (error) {
-      console.error('Error registrando cliente:', error);
+      console.error('Error registrando cliente o financiamiento:', error);
       toast({
         title: "Error al Registrar",
-        description: "No se pudo guardar la información del cliente.",
+        description: "No se pudo guardar la información del cliente y/o su financiamiento.",
         variant: "destructive",
       });
     }
@@ -450,7 +474,7 @@ export default function CrearClienteView() {
             </div>
 
             <div className="space-y-1 lg:col-span-4">
-              <Label htmlFor="convenioPago-input-label">Carga Convenio de Pago</Label>
+              <Label htmlFor="convenioPago-input-label">Carga Convenio General de Pago</Label>
               <div className="flex items-center space-x-3">
                 <Button type="button" variant="outline" onClick={() => document.getElementById('convenioPago-input')?.click()} className="shrink-0">
                     <UploadCloud className="mr-2 h-4 w-4" /> Elegir archivo
@@ -480,6 +504,8 @@ export default function CrearClienteView() {
     </Card>
   );
 }
+    
+
     
 
     
