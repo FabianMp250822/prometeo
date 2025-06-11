@@ -17,7 +17,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ChevronLeft, ChevronRight, AlertCircle, Info, BadgeDollarSign, FileWarning, CheckCircle, Clock } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, AlertCircle, Info, BadgeDollarSign, FileWarning, CheckCircle, Clock, Hourglass } from 'lucide-react'; // Added Hourglass
 import { useToast } from "@/hooks/use-toast";
 import { format, isPast } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -40,7 +40,7 @@ interface Financiamiento {
   [key: string]: any;
 }
 
-type ConvenioStatus = "Pagado" | "Con Atrasos" | "Al Día" | "Activo" | "Sin Acuerdo" | "Desconocido";
+type ConvenioStatus = "Pagado" | "Con Atrasos" | "Al Día" | "Activo" | "Sin Acuerdo" | "Desconocido" | "Pendiente Inicio";
 
 
 interface ClienteConEstado extends Pensionado {
@@ -85,27 +85,57 @@ export default function EstadoCuentaView() {
     if (!financiamiento || !financiamiento.planDePagos || financiamiento.planDePagos.length === 0) {
       return "Sin Acuerdo";
     }
-    if (financiamiento.estadoAcuerdo === 'Pagado' || (saldoPendiente <= 0 && cuotasPagadas === totalCuotas)) {
+
+    if (financiamiento.estadoAcuerdo === 'Pagado' || 
+        (saldoPendiente <= 0 && totalCuotas > 0 && cuotasPagadas === totalCuotas)) {
       return "Pagado";
     }
 
     let hayAtrasos = false;
-    for (const cuota of financiamiento.planDePagos) {
-      if (cuota.estadoCuota === 'Pendiente' && cuota.fechaVencimientoEstimada && isPast(cuota.fechaVencimientoEstimada.toDate())) {
-        hayAtrasos = true;
-        break;
-      }
+    let primeraFechaVencimiento: Date | null = null;
+    const sortedCuotas = [...financiamiento.planDePagos].sort((a, b) => a.numeroCuota - b.numeroCuota);
+
+    if (sortedCuotas.length > 0 && sortedCuotas[0].fechaVencimientoEstimada) {
+        try {
+            primeraFechaVencimiento = sortedCuotas[0].fechaVencimientoEstimada.toDate();
+            if (isNaN(primeraFechaVencimiento.getTime())) primeraFechaVencimiento = null;
+        } catch (e) {
+            console.warn("Error parsing primeraFechaVencimientoEstimada", e);
+            primeraFechaVencimiento = null;
+        }
+    }
+    
+    for (const cuota of sortedCuotas) {
+        if (cuota.estadoCuota === 'Pendiente' && cuota.fechaVencimientoEstimada) {
+            try {
+                const fechaVencimiento = cuota.fechaVencimientoEstimada.toDate();
+                if (isNaN(fechaVencimiento.getTime())) continue; 
+                if (isPast(fechaVencimiento)) {
+                    hayAtrasos = true;
+                    break;
+                }
+            } catch (e) {
+                console.warn("Error parsing cuota.fechaVencimientoEstimada in atrasos check", e);
+                continue;
+            }
+        }
     }
 
     if (hayAtrasos) {
       return "Con Atrasos";
     }
     
+    if (financiamiento.estadoAcuerdo === 'Activo' && cuotasPagadas === 0 && totalCuotas > 0) {
+        if (primeraFechaVencimiento && !isPast(primeraFechaVencimiento)) {
+            return "Pendiente Inicio";
+        }
+    }
+        
     if (financiamiento.estadoAcuerdo === 'Activo') {
-        return "Al Día"; // Si está activo y no hay atrasos, está al día.
+        return "Al Día";
     }
     
-    return "Activo"; // Fallback general si está activo pero no se cumplen otras condiciones
+    return "Activo"; // Fallback, consider "Desconocido" or more specific if needed
   };
 
 
@@ -162,7 +192,7 @@ export default function EstadoCuentaView() {
           let cuotasPg = 0;
           if (financiamientoActivo.planDePagos && financiamientoActivo.planDePagos.length > 0) {
             financiamientoActivo.planDePagos.forEach(cuota => {
-              if (cuota.estadoCuota === 'Pagada') { // Considerar "Validado" si es parte del flujo
+              if (cuota.estadoCuota === 'Pagada') { 
                 pagado += cuota.montoCuota;
                 cuotasPg++;
               }
@@ -237,6 +267,8 @@ export default function EstadoCuentaView() {
         return <Badge variant="destructive"><FileWarning className="mr-1 h-3.5 w-3.5" />{status}</Badge>;
       case "Al Día":
         return <Badge variant="secondary" className="text-blue-600 border-blue-500"><Clock className="mr-1 h-3.5 w-3.5" />{status}</Badge>;
+      case "Pendiente Inicio":
+        return <Badge variant="outline" className="text-yellow-600 border-yellow-500"><Hourglass className="mr-1 h-3.5 w-3.5" />{status}</Badge>;
       case "Sin Acuerdo":
         return <Badge variant="outline">{status}</Badge>;
       case "Activo":
@@ -270,7 +302,7 @@ export default function EstadoCuentaView() {
             <AlertCircle className="mx-auto h-12 w-12 text-destructive mb-3" />
             <p className="text-destructive font-semibold">Error al Cargar Datos</p>
             <p className="text-sm text-muted-foreground">{error}</p>
-            <Button onClick={() => fetchClientesYEstadosDeCuenta(1)} variant="outline" className="mt-4">Reintentar</Button>
+            <Button onClick={() => fetchClientesYEstadosDeCuenta(1, null)} variant="outline" className="mt-4">Reintentar</Button>
           </div>
         )}
         {!isLoading && !error && clientesConEstado.length === 0 && (
