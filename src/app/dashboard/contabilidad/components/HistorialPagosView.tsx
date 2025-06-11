@@ -33,65 +33,6 @@ interface PaymentRecord {
   fechaDecisionAdmin?: Timestamp;
 }
 
-// Datos de ejemplo
-const mockPaymentRecords: PaymentRecord[] = [
-  {
-    id: 'pay_001',
-    clienteId: '12345678',
-    nombreCliente: 'Ana Pérez',
-    financiamientoId: 'fin_abc',
-    numeroCuota: 1,
-    monto: 150000,
-    fechaPago: Timestamp.fromDate(new Date('2024-05-03')),
-    fechaRegistro: Timestamp.fromDate(new Date('2024-05-04T10:00:00Z')),
-    origen: 'cliente_portal_validacion',
-    estado: 'Pendiente Validación',
-    comprobanteUrl: 'https://placehold.co/100x50.png?text=Comp1',
-  },
-  {
-    id: 'pay_002',
-    clienteId: '87654321',
-    nombreCliente: 'Luis Gómez',
-    monto: 250000,
-    fechaPago: Timestamp.fromDate(new Date('2024-05-05')),
-    fechaRegistro: Timestamp.fromDate(new Date('2024-05-05T14:30:00Z')),
-    origen: 'admin_directo',
-    estado: 'Registrado Admin',
-    metodoPagoAdmin: 'Efectivo en Oficina',
-  },
-  {
-    id: 'pay_003',
-    clienteId: '10067001',
-    nombreCliente: 'Carlos Falquez',
-    financiamientoId: 'fin_xyz',
-    numeroCuota: 3,
-    monto: 75000,
-    fechaPago: Timestamp.fromDate(new Date('2024-04-28')),
-    fechaRegistro: Timestamp.fromDate(new Date('2024-04-29T09:15:00Z')),
-    origen: 'cliente_portal_validacion',
-    estado: 'Validado',
-    comprobanteUrl: 'https://placehold.co/100x50.png?text=Comp3',
-    validadoPor: 'admin_user_1',
-    fechaDecisionAdmin: Timestamp.fromDate(new Date('2024-04-30T11:00:00Z')),
-  },
-  {
-    id: 'pay_004',
-    clienteId: '11223344',
-    nombreCliente: 'Sofía Castro',
-    financiamientoId: 'fin_def',
-    numeroCuota: 2,
-    monto: 320000,
-    fechaPago: Timestamp.fromDate(new Date('2024-05-01')),
-    fechaRegistro: Timestamp.fromDate(new Date('2024-05-02T16:45:00Z')),
-    origen: 'cliente_portal_validacion',
-    estado: 'Rechazado',
-    comprobanteUrl: 'https://placehold.co/100x50.png?text=Comp4',
-    notasAdmin: 'Comprobante ilegible.',
-    validadoPor: 'admin_user_2',
-    fechaDecisionAdmin: Timestamp.fromDate(new Date('2024-05-03T10:20:00Z')),
-  },
-];
-
 const ESTADOS_PAGO: PaymentRecord['estado'][] = ['Pendiente Validación', 'Validado', 'Rechazado', 'Registrado Admin'];
 
 export default function HistorialPagosView() {
@@ -102,12 +43,14 @@ export default function HistorialPagosView() {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    // Simular carga de datos
+    // Simular carga de datos o preparación para carga real
     setIsLoading(true);
     setTimeout(() => {
-      setPaymentRecords(mockPaymentRecords);
+      // En un escenario real, aquí se llamarían a las funciones para cargar datos de Firestore.
+      // Como aún no las tenemos, nos aseguramos que paymentRecords esté vacío.
+      setPaymentRecords([]); 
       setIsLoading(false);
-    }, 1000);
+    }, 1000); // Simula un pequeño retraso de red
   }, []);
 
   const formatTimestampToDate = (timestamp?: Timestamp, dateFormat: string = 'PPP p'): string => {
@@ -127,13 +70,13 @@ export default function HistorialPagosView() {
   const handleValidatePayment = (recordId: string) => {
     toast({ title: "Acción Simulada", description: `Pago ${recordId} validado (simulación).` });
     // Aquí iría la lógica para actualizar el estado en Firestore
-    setPaymentRecords(prev => prev.map(rec => rec.id === recordId ? {...rec, estado: 'Validado'} : rec));
+    // setPaymentRecords(prev => prev.map(rec => rec.id === recordId ? {...rec, estado: 'Validado'} : rec));
   };
 
   const handleRejectPayment = (recordId: string) => {
     toast({ title: "Acción Simulada", description: `Pago ${recordId} rechazado (simulación). Se necesitaría un modal para notas.`, variant: "destructive" });
     // Aquí iría la lógica para actualizar el estado y notas en Firestore
-    setPaymentRecords(prev => prev.map(rec => rec.id === recordId ? {...rec, estado: 'Rechazado', notasAdmin: 'Rechazado por admin (sim.)'} : rec));
+    // setPaymentRecords(prev => prev.map(rec => rec.id === recordId ? {...rec, estado: 'Rechazado', notasAdmin: 'Rechazado por admin (sim.)'} : rec));
   };
 
   const filteredRecords = useMemo(() => {
@@ -149,10 +92,10 @@ export default function HistorialPagosView() {
 
   const getBadgeVariant = (estado: PaymentRecord['estado']): "default" | "secondary" | "destructive" | "outline" => {
     switch (estado) {
-      case 'Pendiente Validación': return "outline"; // Yellow-ish or neutral waiting
-      case 'Validado': return "default"; // Greenish or primary success
-      case 'Rechazado': return "destructive"; // Red
-      case 'Registrado Admin': return "secondary"; // Blue-ish or neutral info
+      case 'Pendiente Validación': return "outline"; 
+      case 'Validado': return "default"; 
+      case 'Rechazado': return "destructive"; 
+      case 'Registrado Admin': return "secondary"; 
       default: return "secondary";
     }
   };
@@ -199,17 +142,17 @@ export default function HistorialPagosView() {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
             <p className="ml-3 text-muted-foreground">Cargando historial...</p>
           </div>
-        ) : errorClientes ? (
+        ) : errorClientes ? ( // errorClientes no está definido, se asumirá que es null por ahora o se conectará luego
           <div className="text-center py-10">
             <AlertCircle className="mx-auto h-12 w-12 text-destructive mb-3" />
             <p className="text-destructive font-semibold">Error al Cargar Historial</p>
-            <p className="text-sm text-muted-foreground">{errorClientes}</p>
+            {/* <p className="text-sm text-muted-foreground">{errorClientes}</p> */}
           </div>
         ) : filteredRecords.length === 0 ? (
           <div className="text-center py-10">
             <Info className="mx-auto h-12 w-12 text-primary/50 mb-3" />
             <p className="text-lg text-muted-foreground">No se encontraron registros.</p>
-            <p className="text-sm text-muted-foreground">Prueba con otros filtros o términos de búsqueda.</p>
+            <p className="text-sm text-muted-foreground">Pruebe con otros filtros o términos de búsqueda, o espere a que se registren pagos.</p>
           </div>
         ) : (
           <div className="overflow-x-auto rounded-md border">
@@ -286,3 +229,5 @@ export default function HistorialPagosView() {
 
 // Variable dummy para evitar error de no uso si fetchClientes no se implementa aún
 const errorClientes = null; 
+
+    
