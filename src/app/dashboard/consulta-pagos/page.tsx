@@ -409,7 +409,7 @@ export default function ConsultaPagosPage() {
     <div className="space-y-6">
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle className="text-2xl font-headline text-primary flex items-center">
+ <CardTitle className="text-2xl font-headline text-primary flex items-center">
             <Search className="mr-3 h-7 w-7" /> Consulta y Resumen de Pagos
           </CardTitle>
           <CardDescription>
@@ -464,7 +464,7 @@ export default function ConsultaPagosPage() {
         <Card className="shadow-md">
           <CardHeader>
             <CardTitle className="text-xl font-headline text-primary flex items-center">
-              <ListChecks className="mr-2 h-6 w-6" /> Resultados de Búsqueda ({searchResults.length}{totalResults > ITEMS_PER_PAGE ? '+' : ''})
+ <ListChecks className="mr-2 h-6 w-6" /> Resultados de Búsqueda de Pensionados ({searchResults.length}{totalResults > ITEMS_PER_PAGE ? '+' : ''})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -513,7 +513,7 @@ export default function ConsultaPagosPage() {
             <CardContent className="pt-6">
                 <div className="text-center text-muted-foreground py-8">
                     <Search className="mx-auto h-16 w-16 mb-3 text-primary/30" />
-                    <p className="text-lg">No se encontraron pensionados.</p>
+ <p className="text-lg">No se encontraron pensionados con los filtros aplicados.</p>
                     <p className="text-sm">Pruebe con diferentes filtros o un número de documento.</p>
                 </div>
             </CardContent>
@@ -526,7 +526,7 @@ export default function ConsultaPagosPage() {
           <Card className="shadow-md">
             <CardHeader>
               <CardTitle className="text-xl font-headline text-primary flex items-center">
-                <UserCircle className="mr-2 h-6 w-6" /> Información del Pensionado
+ <UserCircle className="mr-2 h-6 w-6" /> Información del Pensionado y Datos de Nómina/Pensión
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
@@ -572,7 +572,7 @@ export default function ConsultaPagosPage() {
             <Card className="shadow-md mt-6">
               <CardHeader>
                 <CardTitle className="text-xl font-headline text-primary flex items-center">
-                  <CalendarDays className="mr-2 h-6 w-6" /> Resumen Anual de Pagos ({pagosList.length} pagos totales)
+ <CalendarDays className="mr-2 h-6 w-6" /> Resumen Anual de Pagos de Nómina/Pensión ({pagosList.length} pagos totales)
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -607,7 +607,7 @@ export default function ConsultaPagosPage() {
               <CardFooter className="pt-4 flex justify-end">
                 <Button asChild variant="default">
                   <Link href="/dashboard/pagos">
-                    Ver Comprobantes de Pago <ChevronsRight className="ml-2 h-5 w-5" />
+ Ver Comprobantes de Pagos de Nómina/Pensión <ChevronsRight className="ml-2 h-5 w-5" />
                   </Link>
                 </Button>
               </CardFooter>
@@ -619,7 +619,7 @@ export default function ConsultaPagosPage() {
                 <CardContent className="pt-6">
                     <div className="text-center text-muted-foreground py-8">
                         <FileText className="mx-auto h-16 w-16 mb-3 text-primary/30" />
-                        <p className="text-lg">No se encontraron registros de pago.</p>
+ <p className="text-lg">No se encontraron registros de pagos de nómina/pensión.</p>
                         <p className="text-sm">El pensionado seleccionado no tiene historial de pagos en el sistema. Verifica los índices de Firestore si crees que esto es un error.</p>
                     </div>
                 </CardContent>

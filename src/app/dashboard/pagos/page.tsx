@@ -366,7 +366,7 @@ export default function PagosDetallePage() {
     <div className="space-y-6">
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle className="text-2xl font-headline text-primary flex items-center">
+          <CardTitle className="text-2xl font-headline text-primary flex items-center"><Banknote className="mr-3 h-7 w-7" /> Consulta de Pagos (Nómina/Pensión)</CardTitle>
             <Receipt className="mr-3 h-7 w-7" /> Detalle de Pagos (Comprobantes)
           </CardTitle>
           <CardDescription>
@@ -399,7 +399,7 @@ export default function PagosDetallePage() {
           <CardHeader className="bg-muted/30 p-4 sm:p-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                 <div>
-                    <CardTitle className="text-xl sm:text-2xl font-headline text-primary">
+                    <CardTitle className="text-xl sm:text-2xl font-headline text-primary">Comprobante de Pago de Nómina/Pensión</CardTitle>
                         Comprobante de Pago
                     </CardTitle>
                     <CardDescription className="text-sm sm:text-base">
