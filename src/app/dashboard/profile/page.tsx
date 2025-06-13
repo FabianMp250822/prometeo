@@ -10,12 +10,14 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Mail, UserCircle, Shield, Edit3, Save, Home, Phone, CalendarIcon, X } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Mail, UserCircle, Shield, Edit3, Save, Home, Phone, CalendarIcon, X, UploadCloud, Camera } from 'lucide-react';
+import { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, storage } from '@/lib/firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { format, parseISO, isValid } from 'date-fns';
+import Image from 'next/image';
 
 const USERS_COLLECTION = "prometeo_users";
 
@@ -27,6 +29,10 @@ export default function ProfilePage() {
   const [phone, setPhone] = useState('');
   const [birthDate, setBirthDate] = useState<Date | undefined>(undefined);
   
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewURL, setPreviewURL] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -35,6 +41,7 @@ export default function ProfilePage() {
       setDisplayName(userProfile.displayName || '');
       setAddress(userProfile.address || '');
       setPhone(userProfile.phone || '');
+      setPreviewURL(userProfile.photoURL); // Initialize preview with existing photoURL
       if (userProfile.birthDate) {
         try {
           const dateString = typeof userProfile.birthDate === 'string' ? userProfile.birthDate : String(userProfile.birthDate);
@@ -77,33 +84,85 @@ export default function ProfilePage() {
     return 'U';
   };
   
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) { // 2MB limit
+        toast({
+          title: "Archivo muy grande",
+          description: "La imagen no debe exceder los 2MB.",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+        toast({
+          title: "Formato no válido",
+          description: "Solo se permiten imágenes JPG, PNG o WEBP.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setSelectedFile(file);
+      setPreviewURL(URL.createObjectURL(file));
+    }
+  };
+
+  const triggerFileSelect = () => {
+    if (isEditing) {
+      fileInputRef.current?.click();
+    }
+  };
+
   const handleSave = async () => {
     if (!currentUser) return;
     setIsLoading(true);
+    let newPhotoURL = userProfile.photoURL; // Keep existing photoURL by default
+
     try {
-      const userDocRef = doc(db, USERS_COLLECTION, currentUser.uid);
+      if (selectedFile) {
+        const fileExtension = selectedFile.name.split('.').pop();
+        const imagePath = `profile_images/${currentUser.uid}/profile_pic.${fileExtension}`;
+        const imageRef = storageRef(storage, imagePath);
+        await uploadBytes(imageRef, selectedFile);
+        newPhotoURL = await getDownloadURL(imageRef);
+        toast({ title: "Foto de perfil actualizada", description: "Tu nueva foto ha sido guardada." });
+      }
+
       const updatedData: any = { 
         displayName: displayName.trim() || null,
         address: address.trim() || null,
         phone: phone.trim() || null,
         birthDate: birthDate ? format(birthDate, 'yyyy-MM-dd') : null,
+        photoURL: newPhotoURL,
       };
+      const userDocRef = doc(db, USERS_COLLECTION, currentUser.uid);
       await updateDoc(userDocRef, updatedData);
+      
       toast({ title: "Perfil actualizado", description: "Tu información ha sido guardada." });
       setIsEditing(false);
-    } catch (error) {
+      setSelectedFile(null); // Clear selected file after successful save
+      // PreviewURL will be updated by the AuthContext listener picking up the new photoURL from Firestore.
+      // Or, if no new file was uploaded, previewURL (which should be userProfile.photoURL) remains correct.
+      // For immediate visual feedback if only photo changed: setPreviewURL(newPhotoURL);
+      if(newPhotoURL !== userProfile.photoURL) setPreviewURL(newPhotoURL);
+
+
+    } catch (error: any) {
       console.error("Error updating profile:", error);
-      toast({ title: "Error", description: "No se pudo actualizar el perfil.", variant: "destructive" });
+      toast({ title: "Error", description: error.message || "No se pudo actualizar el perfil.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const resetFormFields = () => {
+  const resetFormFieldsAndPhoto = () => {
     if (userProfile) {
       setDisplayName(userProfile.displayName || '');
       setAddress(userProfile.address || '');
       setPhone(userProfile.phone || '');
+      setPreviewURL(userProfile.photoURL); // Reset preview to stored photoURL
+      setSelectedFile(null); // Clear any selected file
       if (userProfile.birthDate) {
          try {
           const dateString = typeof userProfile.birthDate === 'string' ? userProfile.birthDate : String(userProfile.birthDate);
@@ -122,33 +181,59 @@ export default function ProfilePage() {
 
   const handleCancelEdit = () => {
     setIsEditing(false);
-    resetFormFields();
+    resetFormFieldsAndPhoto();
   }
+  
+  const avatarSrc = previewURL || `https://avatar.vercel.sh/${currentUser.uid}.png?size=128`;
+
 
   return (
     <div className="space-y-8 max-w-4xl mx-auto">
       <Card className="shadow-lg">
-        <CardHeader className="text-center">
-          <Avatar className="mx-auto h-24 w-24 mb-4 border-4 border-primary shadow-md">
-            <AvatarImage src={currentUser.uid ? `https://avatar.vercel.sh/${currentUser.uid}.png?size=128` : undefined} alt={userProfile.displayName || 'Usuario'} data-ai-hint="user portrait" />
-            <AvatarFallback className="text-3xl bg-primary/20 text-primary font-semibold">
-              {getInitials(displayName || userProfile.displayName)}
-            </AvatarFallback>
-          </Avatar>
+        <CardHeader className="text-center relative">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept="image/png, image/jpeg, image/webp"
+            className="hidden"
+            disabled={!isEditing || isLoading}
+          />
+          <div 
+            className={`mx-auto relative group ${isEditing ? 'cursor-pointer' : ''}`}
+            onClick={isEditing ? triggerFileSelect : undefined}
+          >
+            <Avatar className="h-24 w-24 mb-4 border-4 border-primary shadow-md">
+              <AvatarImage 
+                src={avatarSrc}  // Use previewURL if available, then userProfile.photoURL, then Vercel default
+                alt={displayName || userProfile.displayName || 'Usuario'} 
+              />
+              <AvatarFallback className="text-3xl bg-primary/20 text-primary font-semibold">
+                {getInitials(displayName || userProfile.displayName)}
+              </AvatarFallback>
+            </Avatar>
+            {isEditing && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 rounded-full transition-opacity duration-200">
+                <Camera className="h-8 w-8 text-white" />
+              </div>
+            )}
+          </div>
+
           <CardTitle className="text-3xl font-headline text-primary">
             {isEditing ? (
               <Input 
                 value={displayName} 
                 onChange={(e) => setDisplayName(e.target.value)}
-                className="text-3xl font-headline text-primary md:text-left w-full"
+                className="text-3xl font-headline text-primary md:text-left w-full text-center"
                 placeholder="Nombre Completo"
+                disabled={isLoading}
               />
             ) : (
               displayName || userProfile.displayName || "Nombre no disponible"
             )}
           </CardTitle>
           <CardDescription className="text-lg text-muted-foreground">
-            Gestiona la información de tu perfil.
+            Gestiona la información de tu perfil y tu foto.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 pt-6">
@@ -183,6 +268,7 @@ export default function ProfilePage() {
                     onChange={(e) => setAddress(e.target.value)} 
                     placeholder="Ej: Calle Falsa 123, Ciudad"
                     className="text-md font-medium"
+                    disabled={isLoading}
                   />
                 ) : (
                   <p id="addressLabel" className="text-md font-medium break-words">{address || userProfile.address || "No especificada"}</p>
@@ -203,6 +289,7 @@ export default function ProfilePage() {
                     onChange={(e) => setPhone(e.target.value)} 
                     placeholder="Ej: +1 555 123456"
                     className="text-md font-medium"
+                    disabled={isLoading}
                   />
                 ) : (
                   <p id="phoneLabel" className="text-md font-medium break-words">{phone || userProfile.phone || "No especificado"}</p>
@@ -221,6 +308,7 @@ export default function ProfilePage() {
                       <Button
                         variant={"outline"}
                         className="w-full justify-start text-left font-normal text-md"
+                        disabled={isLoading}
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
                         {birthDate ? format(birthDate, "PPP", { useAdditionalWeekYearTokens: false, useAdditionalDayOfYearTokens: false }) : <span>Selecciona una fecha</span>}
@@ -235,6 +323,7 @@ export default function ProfilePage() {
                         captionLayout="dropdown-buttons"
                         fromYear={1900}
                         toYear={new Date().getFullYear()}
+                        disabled={isLoading}
                       />
                     </PopoverContent>
                   </Popover>
@@ -257,7 +346,7 @@ export default function ProfilePage() {
                   Cancelar
                 </Button>
                 <Button onClick={handleSave} disabled={isLoading}>
-                  {isLoading ? <Save className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                   Guardar
                 </Button>
               </>

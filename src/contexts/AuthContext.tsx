@@ -17,6 +17,7 @@ interface UserProfile {
   address: string | null;
   phone: string | null;
   birthDate: string | null; // Store as ISO string e.g., "YYYY-MM-DD" or null
+  photoURL: string | null; // Added for profile picture
   // Add other profile fields as needed
 }
 
@@ -41,7 +42,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     let unsubscribeProfile: Unsubscribe | undefined;
     
-    // Log the databaseId of the db instance AuthContext is using
     const dbInstanceDatabaseId = (db as any)._databaseId?.databaseId || '(default)';
     console.log(`AuthContext: Using Firestore instance with databaseId: "${dbInstanceDatabaseId}" (Project: ${db.app.options.projectId}). User collection: "${USERS_COLLECTION}"`);
 
@@ -76,6 +76,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               address: null,
               phone: null,
               birthDate: null,
+              photoURL: null, // Initialize photoURL
             };
             try {
               await setDoc(userDocRef, defaultProfile);
@@ -139,3 +140,4 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     </AuthContext.Provider>
   );
 };
+
