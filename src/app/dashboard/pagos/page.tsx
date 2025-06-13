@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -91,30 +90,83 @@ export default function PagosDetallePage() {
     return `${prefix}${numValue.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
   
-  const getMonthNameFromTimestamp = useCallback((ts: Timestamp | {seconds: number, nanoseconds: number} | undefined): string => {
-    if (!ts) return "MesDesconocido";
-    let date: Date;
-    if (ts instanceof Timestamp) {
-        date = ts.toDate();
-    } else if (typeof ts === 'object' && 'seconds' in ts) {
-        date = new Date(ts.seconds * 1000);
-    } else {
-        return "MesDesconocido";
+  // Función para extraer año y mes del periodoPago
+  const parsePaymentPeriod = (periodoPago: string | undefined): { year: number, month: number } | null => {
+    if (!periodoPago) return null;
+    
+    // Ejemplos de formatos: "1 ene. 2025 a 15 ene. 2025", "16 abr. 2024 a 30 abr. 2024"
+    const match = periodoPago.match(/(\d{1,2})\s+(\w+)\.?\s+(\d{4})/);
+    if (match) {
+      const [, , monthStr, yearStr] = match;
+      const year = parseInt(yearStr);
+      
+      // Mapeo de nombres de meses en español
+      const monthMap: { [key: string]: number } = {
+        'ene': 1, 'enero': 1,
+        'feb': 2, 'febrero': 2,
+        'mar': 3, 'marzo': 3,
+        'abr': 4, 'abril': 4,
+        'may': 5, 'mayo': 5,
+        'jun': 6, 'junio': 6,
+        'jul': 7, 'julio': 7,
+        'ago': 8, 'agosto': 8,
+        'sep': 9, 'septiembre': 9,
+        'oct': 10, 'octubre': 10,
+        'nov': 11, 'noviembre': 11,
+        'dic': 12, 'diciembre': 12
+      };
+      
+      const month = monthMap[monthStr.toLowerCase()] || 0;
+      if (month > 0) {
+        return { year, month };
+      }
     }
-    return date.toLocaleDateString('es-CO', { month: 'long' });
+    
+    return null;
+  };
+
+  // Función para obtener el nombre del mes desde el periodoPago
+  const getMonthNameFromPeriod = (periodoPago: string | undefined): string => {
+    const parsed = parsePaymentPeriod(periodoPago);
+    if (!parsed) return "MesDesconocido";
+    
+    const monthNames = [
+      '', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+    ];
+    
+    return monthNames[parsed.month] || "MesDesconocido";
+  };
+
+  // Memoizar las funciones para evitar que se recreen en cada render
+  const getMonthNameFromTimestamp = useMemo(() => {
+    return (ts: Timestamp | {seconds: number, nanoseconds: number} | undefined): string => {
+      if (!ts) return "MesDesconocido";
+      let date: Date;
+      if (ts instanceof Timestamp) {
+          date = ts.toDate();
+      } else if (typeof ts === 'object' && 'seconds' in ts) {
+          date = new Date(ts.seconds * 1000);
+      } else {
+          return "MesDesconocido";
+      }
+      return date.toLocaleDateString('es-CO', { month: 'long' });
+    };
   }, []);
   
-  const getMonthNumberFromTimestamp = useCallback((ts: Timestamp | {seconds: number, nanoseconds: number} | undefined): number => {
-    if (!ts) return 0; 
-    let date: Date;
-    if (ts instanceof Timestamp) {
-        date = ts.toDate();
-    } else if (typeof ts === 'object' && 'seconds' in ts) {
-        date = new Date(ts.seconds * 1000);
-    } else {
-        return 0;
-    }
-    return date.getMonth() + 1; // 1-12
+  const getMonthNumberFromTimestamp = useMemo(() => {
+    return (ts: Timestamp | {seconds: number, nanoseconds: number} | undefined): number => {
+      if (!ts) return 0; 
+      let date: Date;
+      if (ts instanceof Timestamp) {
+          date = ts.toDate();
+      } else if (typeof ts === 'object' && 'seconds' in ts) {
+          date = new Date(ts.seconds * 1000);
+      } else {
+          return 0;
+      }
+      return date.getMonth() + 1; // 1-12
+    };
   }, []);
 
   const cleanConceptName = (name: string): string => {
@@ -127,67 +179,56 @@ export default function PagosDetallePage() {
   useEffect(() => {
     console.log("PagosDetallePage: Context/Loading Effect. isContextLoading:", isContextLoading, "ContextPensionado ID:", contextPensionado?.id);
     if (!isContextLoading && contextPensionado && contextPagos) {
-        setIsLoading(true);
-        setSelectedPensionado(contextPensionado);
-        setAllPagosList(contextPagos); // Assuming contextPagos is already sorted desc by fechaProcesado
-        setDocumentoInput(contextPensionado.id);
-        setError(null);
+      setIsLoading(true);
+      setSelectedPensionado(contextPensionado);
+      setAllPagosList(contextPagos);
+      setDocumentoInput(contextPensionado.id);
+      setError(null);
 
-        if (contextPagos.length > 0) {
-            const lastPago = contextPagos[0]; // Most recent pago
-            setSelectedPago(lastPago);
-
-            const years = new Set<string>();
-            contextPagos.forEach(p => {
-                if (p.fechaProcesado) {
-                    const date = (p.fechaProcesado instanceof Timestamp) ? p.fechaProcesado.toDate() : new Date((p.fechaProcesado as any).seconds * 1000);
-                    years.add(date.getFullYear().toString());
-                } else if (p.año) {
-                    years.add(p.año);
-                }
-            });
-            const sortedYears = Array.from(years).sort((a, b) => b.localeCompare(a));
-            setAvailableYears(sortedYears);
-
-            let targetYear = "";
-            if (lastPago.fechaProcesado) {
-                const date = (lastPago.fechaProcesado instanceof Timestamp) ? lastPago.fechaProcesado.toDate() : new Date((lastPago.fechaProcesado as any).seconds * 1000);
-                targetYear = date.getFullYear().toString();
-            } else if (lastPago.año) {
-                targetYear = lastPago.año;
-            }
-            
-            if (sortedYears.includes(targetYear)) {
-                setSelectedYearFilter(targetYear);
-            } else if (sortedYears.length > 0) {
-                setSelectedYearFilter(sortedYears[0]);
-            } else {
-                 setSelectedYearFilter(undefined);
-            }
-        } else {
-            setSelectedPago(null);
-            setAvailableYears([]);
-            setSelectedYearFilter(undefined);
-            setAvailableMonths([]);
-            setSelectedMonthFilter(undefined);
-            toast({ title: "Sin Pagos", description: "Este pensionado no tiene registros de pago en el contexto.", variant: "default" });
-        }
-        setIsLoading(false);
-
-    } else if (!isContextLoading && !contextPensionado) {
-        setSelectedPensionado(null);
-        setAllPagosList([]);
+      if (contextPagos.length > 0) {
         setSelectedPago(null);
-        setDocumentoInput("");
+
+        // Extraer años desde el periodoPago, no desde fechaProcesado
+        const years = new Set<string>();
+        contextPagos.forEach(p => {
+          const parsed = parsePaymentPeriod(p.periodoPago);
+          if (parsed) {
+            years.add(parsed.year.toString());
+          } else if (p.año) {
+            years.add(p.año);
+          }
+        });
+        
+        const sortedYears = Array.from(years).sort((a, b) => b.localeCompare(a));
+        setAvailableYears(sortedYears);
+
+        setSelectedYearFilter(undefined);
+        setAvailableMonths([]);
+        setSelectedMonthFilter(undefined);
+      } else {
+        setSelectedPago(null);
         setAvailableYears([]);
         setSelectedYearFilter(undefined);
         setAvailableMonths([]);
         setSelectedMonthFilter(undefined);
-        setError(null);
-        setIsLoading(false);
-    }
-  }, [contextPensionado, contextPagos, isContextLoading, toast, getMonthNameFromTimestamp, getMonthNumberFromTimestamp]);
+        toast({ title: "Sin Pagos", description: "Este pensionado no tiene registros de pago en el contexto.", variant: "default" });
+      }
+      setIsLoading(false);
 
+    } else if (!isContextLoading && !contextPensionado) {
+      // Limpiar todo cuando no hay contexto
+      setSelectedPensionado(null);
+      setAllPagosList([]);
+      setSelectedPago(null);
+      setDocumentoInput("");
+      setAvailableYears([]);
+      setSelectedYearFilter(undefined);
+      setAvailableMonths([]);
+      setSelectedMonthFilter(undefined);
+      setError(null);
+      setIsLoading(false);
+    }
+  }, [contextPensionado, contextPagos, isContextLoading, toast]);
 
   const fetchPensionadoYPagos = async (pensionadoId: string) => {
     if (!pensionadoId.trim()) {
@@ -247,96 +288,68 @@ export default function PagosDetallePage() {
     }
   };
   
+  // Modificar los useEffect de filtros para que sean opcionales
   useEffect(() => {
     console.log("PagosDetallePage: Effect for availableMonths. Year:", selectedYearFilter, "Pagos count:", allPagosList.length);
+    
+    // Solo ejecutar si hay un año seleccionado
     if (selectedYearFilter && allPagosList.length > 0) {
-        const monthsForYear = new Map<number, string>(); 
-        allPagosList.forEach(p => {
-            if (p.fechaProcesado) {
-                const date = (p.fechaProcesado instanceof Timestamp) ? p.fechaProcesado.toDate() : new Date((p.fechaProcesado as any).seconds * 1000);
-                const paymentYear = date.getFullYear().toString();
-                if (paymentYear === selectedYearFilter) {
-                    const paymentMonthNum = getMonthNumberFromTimestamp(p.fechaProcesado);
-                    const paymentMonthName = getMonthNameFromTimestamp(p.fechaProcesado);
-                    if (paymentMonthNum > 0 && !monthsForYear.has(paymentMonthNum)) {
-                        monthsForYear.set(paymentMonthNum, `${paymentMonthName.charAt(0).toUpperCase() + paymentMonthName.slice(1)} (${paymentMonthNum})`);
-                    }
-                }
-            }
-        });
-        
-        const sortedMonthStrings = Array.from(monthsForYear.entries())
-            .sort((a, b) => a[0] - b[0]) 
-            .map(entry => entry[1]); 
-
-        setAvailableMonths(sortedMonthStrings);
-        
-        // Auto-select month after availableMonths are updated
-        if (sortedMonthStrings.length > 0) {
-            // If current selectedPago corresponds to the selectedYearFilter, try to select its month
-            let monthToSelectByDefault = sortedMonthStrings[0]; // Default to first available
-            if (selectedPago && selectedPago.fechaProcesado) {
-                const pagoDate = (selectedPago.fechaProcesado instanceof Timestamp) ? selectedPago.fechaProcesado.toDate() : new Date((selectedPago.fechaProcesado as any).seconds * 1000);
-                if (pagoDate.getFullYear().toString() === selectedYearFilter) {
-                    const pagoMonthNum = getMonthNumberFromTimestamp(selectedPago.fechaProcesado);
-                    const pagoMonthName = getMonthNameFromTimestamp(selectedPago.fechaProcesado);
-                    const pagoMonthStr = `${pagoMonthName.charAt(0).toUpperCase() + pagoMonthName.slice(1)} (${pagoMonthNum})`;
-                    if (sortedMonthStrings.includes(pagoMonthStr)) {
-                        monthToSelectByDefault = pagoMonthStr;
-                    }
-                }
-            }
-             if (selectedMonthFilter !== monthToSelectByDefault) { // Only update if different to prevent loop
-                setSelectedMonthFilter(monthToSelectByDefault);
-             }
-        } else {
-            setSelectedMonthFilter(undefined);
+      const monthsForYear = new Map<number, string>();
+      
+      allPagosList.forEach(p => {
+        const parsed = parsePaymentPeriod(p.periodoPago);
+        if (parsed && parsed.year.toString() === selectedYearFilter) {
+          const monthName = getMonthNameFromPeriod(p.periodoPago);
+          if (!monthsForYear.has(parsed.month)) {
+            monthsForYear.set(parsed.month, `${monthName.charAt(0).toUpperCase() + monthName.slice(1)} (${parsed.month})`);
+          }
         }
+      });
+      
+      const sortedMonthStrings = Array.from(monthsForYear.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(entry => entry[1]);
 
-    } else { 
-        setAvailableMonths([]);
-        setSelectedMonthFilter(undefined);
+      setAvailableMonths(sortedMonthStrings);
+      setSelectedMonthFilter(undefined); // No seleccionar mes por defecto
+    } else {
+      setAvailableMonths([]);
+      setSelectedMonthFilter(undefined);
     }
-  }, [selectedYearFilter, allPagosList, getMonthNameFromTimestamp, getMonthNumberFromTimestamp, selectedPago]); // Added selectedPago
+  }, [selectedYearFilter, allPagosList.length]);
 
-
+  // Modificar el useEffect para mostrar pago específico solo cuando hay filtros
   useEffect(() => {
     console.log("PagosDetallePage: Effect to update selectedPago. YearF:", selectedYearFilter, "MonthF:", selectedMonthFilter);
+    
+    // Solo mostrar un pago específico si AMBOS filtros están seleccionados
     if (selectedYearFilter && selectedMonthFilter && allPagosList.length > 0) {
-        const monthNumberToFind = parseInt(selectedMonthFilter.match(/\((\d+)\)/)?.[1] || "0");
-        if (monthNumberToFind === 0) {
-            if (selectedPago !== null) setSelectedPago(null);
-            return;
-        }
+      const monthNumberToFind = parseInt(selectedMonthFilter.match(/\((\d+)\)/)?.[1] || "0");
+      if (monthNumberToFind === 0) {
+        setSelectedPago(null);
+        return;
+      }
 
-        const pagoEncontrado = allPagosList.find(p => {
-            if (!p.fechaProcesado) return false;
-            const date = (p.fechaProcesado instanceof Timestamp) 
-                            ? p.fechaProcesado.toDate() 
-                            : new Date((p.fechaProcesado as any).seconds * 1000);
-            const pagoAnio = date.getFullYear().toString();
-            const pagoMes = date.getMonth() + 1; 
-            return pagoAnio === selectedYearFilter && pagoMes === monthNumberToFind;
+      const pagoEncontrado = allPagosList.find(p => {
+        const parsed = parsePaymentPeriod(p.periodoPago);
+        if (!parsed) return false;
+        return parsed.year.toString() === selectedYearFilter && parsed.month === monthNumberToFind;
+      });
+      
+      setSelectedPago(pagoEncontrado || null);
+
+      if (!pagoEncontrado && !isContextLoading && !isLoading) {
+        toast({
+          title: "Sin Pago",
+          description: `No se encontró un pago para ${selectedMonthFilter.split(' (')[0]} de ${selectedYearFilter}.`,
+          variant: "default"
         });
-        
-        if (selectedPago?.id !== pagoEncontrado?.id) {
-            setSelectedPago(pagoEncontrado || null);
-        }
-
-        if (!pagoEncontrado && !isContextLoading && !isLoading && (selectedYearFilter || selectedMonthFilter) ) { 
-             toast({ title: "Sin Pago", description: `No se encontró un pago para ${selectedMonthFilter.split(' (')[0]} de ${selectedYearFilter}.`, variant: "default" });
-        }
-    } else if (allPagosList.length > 0 && (!selectedYearFilter || !selectedMonthFilter)) {
-        // If filters are cleared but we have pagos, default to the latest one
-        // This ensures if context loaded, the first payment is shown
-        if (selectedPago?.id !== allPagosList[0]?.id) {
-             setSelectedPago(allPagosList[0] || null);
-        }
-    } else if (allPagosList.length === 0) {
-        if (selectedPago !== null) setSelectedPago(null);
+      }
+    } else {
+      // Si no hay filtros completos, no mostrar ningún pago específico (mostrar lista)
+      setSelectedPago(null);
     }
-  }, [selectedYearFilter, selectedMonthFilter, allPagosList, toast, isContextLoading, isLoading]); // Removed selectedPago from deps
-
+  }, [selectedYearFilter, selectedMonthFilter, allPagosList.length, isContextLoading, isLoading]);
 
   const handleSearch = () => {
     fetchPensionadoYPagos(documentoInput);
@@ -366,8 +379,9 @@ export default function PagosDetallePage() {
     <div className="space-y-6">
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle className="text-2xl font-headline text-primary flex items-center"><Banknote className="mr-3 h-7 w-7" /> Consulta de Pagos (Nómina/Pensión)</CardTitle>
-            <Receipt className="mr-3 h-7 w-7" /> Detalle de Pagos (Comprobantes)
+          <CardTitle className="text-2xl font-headline text-primary flex items-center">
+            <Banknote className="mr-3 h-7 w-7" />
+            Consulta de Pagos (Nómina/Pensión)
           </CardTitle>
           <CardDescription>
             {selectedPensionado 
@@ -399,32 +413,54 @@ export default function PagosDetallePage() {
           <CardHeader className="bg-muted/30 p-4 sm:p-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                 <div>
-                    <CardTitle className="text-xl sm:text-2xl font-headline text-primary">Comprobante de Pago de Nómina/Pensión</CardTitle>
-                        Comprobante de Pago
+                    <CardTitle className="text-xl sm:text-2xl font-headline text-primary">
+                      {selectedPago ? 'Comprobante de Pago de Nómina/Pensión' : 'Historial de Pagos de Nómina/Pensión'}
                     </CardTitle>
                     <CardDescription className="text-sm sm:text-base">
                         {selectedPensionado.empleado || 'N/A'} (C.C. {selectedPensionado.id})
+                        {!selectedPago && allPagosList.length > 0 && (
+                          <span className="block mt-1">
+                            Total de pagos: {allPagosList.length} | Use los filtros para ver un comprobante específico
+                          </span>
+                        )}
                     </CardDescription>
                 </div>
-                <div className="flex gap-2 mt-2 sm:mt-0 items-center">
+                {allPagosList.length > 0 && (
+                  <div className="flex gap-2 mt-2 sm:mt-0 items-center">
                     <Label className="text-sm hidden sm:inline">Filtrar por:</Label>
-                    <Select value={selectedYearFilter || ""} onValueChange={setSelectedYearFilter} disabled={availableYears.length === 0 || isLoading || isContextLoading}>
-                        <SelectTrigger className="w-full sm:w-[120px] text-sm"><SelectValue placeholder="Año" /></SelectTrigger>
-                        <SelectContent>
-                            {availableYears.map(year => <SelectItem key={year} value={year}>{year}</SelectItem>)}
-                        </SelectContent>
+                    <Select 
+                      value={selectedYearFilter || "ALL_YEARS"} 
+                      onValueChange={(value) => setSelectedYearFilter(value === "ALL_YEARS" ? undefined : value)} 
+                      disabled={availableYears.length === 0 || isLoading || isContextLoading}
+                    >
+                      <SelectTrigger className="w-full sm:w-[120px] text-sm">
+                        <SelectValue placeholder="Año" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ALL_YEARS">Todos los años</SelectItem>
+                        {availableYears.map(year => <SelectItem key={year} value={year}>{year}</SelectItem>)}
+                      </SelectContent>
                     </Select>
-                     <Select value={selectedMonthFilter || ""} onValueChange={setSelectedMonthFilter} disabled={availableMonths.length === 0 || isLoading || isContextLoading}>
-                        <SelectTrigger className="w-full sm:w-[180px] text-sm"><SelectValue placeholder="Mes" /></SelectTrigger>
-                        <SelectContent>
-                            {availableMonths.map(monthStr => <SelectItem key={monthStr} value={monthStr}>{monthStr.split(' (')[0]}</SelectItem>)}
-                        </SelectContent>
+                    <Select 
+                      value={selectedMonthFilter || "ALL_MONTHS"} 
+                      onValueChange={(value) => setSelectedMonthFilter(value === "ALL_MONTHS" ? undefined : value)} 
+                      disabled={availableMonths.length === 0 || isLoading || isContextLoading}
+                    >
+                      <SelectTrigger className="w-full sm:w-[180px] text-sm">
+                        <SelectValue placeholder="Mes" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ALL_MONTHS">Todos los meses</SelectItem>
+                        {availableMonths.map(monthStr => <SelectItem key={monthStr} value={monthStr}>{monthStr.split(' (')[0]}</SelectItem>)}
+                      </SelectContent>
                     </Select>
-                </div>
+                  </div>
+                )}
             </div>
           </CardHeader>
           
           {selectedPago ? (
+            // Mostrar comprobante específico (cuando hay filtros aplicados)
             <>
               <CardContent className="p-4 sm:p-6 space-y-4 text-sm">
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-2 border-b pb-4">
@@ -495,16 +531,64 @@ export default function PagosDetallePage() {
                     </p>
                 </CardFooter>
             </>
+          ) : allPagosList.length > 0 ? (
+            // Mostrar TABLA CON TODOS LOS PAGOS (nuevo contenido)
+            <CardContent className="p-4 sm:p-6">
+              <div className="overflow-x-auto rounded-md border">
+                <Table>
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead>Año</TableHead>
+                      <TableHead>Período de Pago</TableHead>
+                      <TableHead>Fecha Procesado</TableHead>
+                      <TableHead>Fecha Liquidación</TableHead>
+                      <TableHead className="text-right">Valor Neto</TableHead>
+                      <TableHead>Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allPagosList.map((pago) => (
+                      <TableRow key={pago.id}>
+                        <TableCell>{pago.año || 'N/A'}</TableCell>
+                        <TableCell>{pago.periodoPago || 'N/A'}</TableCell>
+                        <TableCell>{formatFirebaseTimestamp(pago.fechaProcesado, { year: 'numeric', month: 'short', day: 'numeric' })}</TableCell>
+                        <TableCell>{formatFirebaseTimestamp(pago.fechaLiquidacion || pago.fechaProcesado, { year: 'numeric', month: 'short', day: 'numeric' })}</TableCell>
+                        <TableCell className="text-right font-medium">{formatCurrency(pago.valorNeto)}</TableCell>
+                        <TableCell>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => {
+                              // Usar periodoPago en lugar de fechaProcesado
+                              const parsed = parsePaymentPeriod(pago.periodoPago);
+                              if (parsed) {
+                                const year = parsed.year.toString();
+                                const month = parsed.month;
+                                const monthName = getMonthNameFromPeriod(pago.periodoPago);
+                                
+                                setSelectedYearFilter(year);
+                                setSelectedMonthFilter(`${monthName.charAt(0).toUpperCase() + monthName.slice(1)} (${month})`);
+                              }
+                            }}
+                          >
+                            Ver Comprobante
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
           ) : (
-             allPagosList.length > 0 && ( 
-                <CardContent className="pt-6">
-                    <div className="text-center text-muted-foreground py-12">
-                        <CalendarDays className="mx-auto h-16 w-16 mb-4 text-primary/30" />
-                        <p className="text-lg font-semibold">Seleccione un Periodo</p>
-                        <p className="text-sm">Use los filtros de año y mes para ver un comprobante de pago específico, o no se encontró un pago para el periodo actual.</p>
-                    </div>
-                </CardContent>
-             )
+            // Sin pagos
+            <CardContent className="pt-6">
+              <div className="text-center text-muted-foreground py-12">
+                <CalendarDays className="mx-auto h-16 w-16 mb-4 text-primary/30" />
+                <p className="text-lg font-semibold">Sin Registros de Pago</p>
+                <p className="text-sm">Este pensionado no tiene historial de pagos en el sistema.</p>
+              </div>
+            </CardContent>
           )}
         </Card>
       )}

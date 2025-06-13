@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -69,6 +68,11 @@ export default function ConsultaPagosPage() {
   const [selectedPensionado, setSelectedPensionado] = useState<PensionadoLocal | null>(null);
   const [pagosList, setPagosList] = useState<PagoLocal[]>([]);
   const [pagosAnualesStats, setPagosAnualesStats] = useState<PagosAnualesStats>({});
+
+  // Nuevos estados para autocompletado
+  const [suggestions, setSuggestions] = useState<PensionadoLocal[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
+  const [isSearching, setIsSearching] = useState<boolean>(false);
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isListLoading, setIsListLoading] = useState<boolean>(false);
@@ -186,11 +190,14 @@ export default function ConsultaPagosPage() {
 
   const fetchPensionadoDetails = async (pensionadoId: string) => {
     setIsLoading(true);
-    setContextIsLoading(true); // Indicar que el contexto se está actualizando
+    setContextIsLoading(true);
     setError(null);
+    
+    // Limpiar completamente el estado antes de la nueva consulta
     setSelectedPensionado(null);
     setPagosList([]);
     setPagosAnualesStats({});
+    clearContextPensionadoData(); // Agregar esta línea crucial
 
     try {
       const pensionadoDocRef = doc(db, PENSIONADOS_COLLECTION, pensionadoId);
@@ -200,6 +207,7 @@ export default function ConsultaPagosPage() {
         let pensionadoData = { id: pensionadoDocSnap.id, ...pensionadoDocSnap.data() } as PensionadoLocal;
         console.log(`Consulta Pagos: Pensionado ID: ${pensionadoData.id}. Datos iniciales:`, JSON.stringify(pensionadoData));
 
+        // Obtener datos adicionales de Pariss1
         const pariss1DocRef = doc(db, PARISS1_COLLECTION, pensionadoData.id);
         const pariss1DocSnap = await getDoc(pariss1DocRef);
         if (pariss1DocSnap.exists()) {
@@ -207,28 +215,47 @@ export default function ConsultaPagosPage() {
           toast({ title: "Información Adicional", description: "Detalles de Pariss1 cargados.", variant: "default" });
           console.log(`Consulta Pagos: Datos de Pariss1 para ${pensionadoData.id} cargados y fusionados.`);
         } else {
-          toast({ title: "Advertencia", description: "No se encontraron detalles adicionales en Pariss1 para este pensionado.", variant: "default" });
-          console.warn(`Consulta Pagos: No se encontró documento en Pariss1 para ${pensionadoData.id} en la ruta ${pariss1DocRef.path}`);
+          console.warn(`Consulta Pagos: No se encontró documento en Pariss1 para ${pensionadoData.id}`);
         }
+        
+        // Establecer pensionado antes de buscar pagos
         setSelectedPensionado(pensionadoData);
         setViewMode('details');
 
+        // Consultar pagos con logging detallado
         const pagosCollectionRef = collection(db, PENSIONADOS_COLLECTION, pensionadoData.id, PAGOS_SUBCOLLECTION);
-        console.log(`Consulta Pagos: Construida referencia a la subcolección de pagos: ${pagosCollectionRef.path}`);
+        console.log(`Consulta Pagos: Referencia a pagos: ${pagosCollectionRef.path}`);
+        
         const pagosQuery = query(pagosCollectionRef, orderBy("año", "desc"), orderBy("fechaProcesado", "desc"));
-        console.log("Consulta Pagos: Objeto Query de Pagos (configuración):", pagosQuery);
+        console.log("Consulta Pagos: Ejecutando query de pagos...");
+        
         const pagosSnapshot = await getDocs(pagosQuery);
-        console.log(`Consulta Pagos: Snapshot de pagos recibido. Vacío: ${pagosSnapshot.empty}. Número de documentos: ${pagosSnapshot.docs.length}`);
+        console.log(`Consulta Pagos: Snapshot recibido. Vacío: ${pagosSnapshot.empty}, Docs: ${pagosSnapshot.docs.length}`);
+
+        if (pagosSnapshot.empty) {
+          console.warn(`Consulta Pagos: No se encontraron pagos para ${pensionadoData.id}`);
+          setPagosList([]);
+          setPagosAnualesStats({});
+          setContextPensionadoData(pensionadoData as Pensionado, []);
+          toast({ 
+            title: "Sin Pagos", 
+            description: "No se encontraron registros de pagos para este pensionado.", 
+            variant: "default" 
+          });
+          return;
+        }
 
         const pagosTemp: PagoLocal[] = [];
         pagosSnapshot.forEach(docSnap => {
-            const data = docSnap.data();
-            console.log(`Consulta Pagos: Documento de pago ID: ${docSnap.id}, Datos Brutos:`, JSON.stringify(data));
-            pagosTemp.push({ id: docSnap.id, ...data } as PagoLocal);
+          const data = docSnap.data();
+          console.log(`Consulta Pagos: Pago ID: ${docSnap.id}, Datos:`, JSON.stringify(data));
+          pagosTemp.push({ id: docSnap.id, ...data } as PagoLocal);
         });
+        
+        console.log(`Consulta Pagos: ${pagosTemp.length} pagos procesados`);
         setPagosList(pagosTemp);
-        console.log(`Consulta Pagos: pagosList actualizado con ${pagosTemp.length} pagos.`);
 
+        // Calcular estadísticas
         if (pagosTemp.length > 0) {
           const stats: PagosAnualesStats = {};
           const groupedByYear = pagosTemp.reduce<Record<string, PagoLocal[]>>((acc, pago) => {
@@ -249,36 +276,36 @@ export default function ConsultaPagosPage() {
                 minNeto: Math.min(...netos),
               };
             } else {
-               stats[year] = { count: yearPagos.length, avgNeto: 0, maxNeto: 0, minNeto: 0 };
+              stats[year] = { count: yearPagos.length, avgNeto: 0, maxNeto: 0, minNeto: 0 };
             }
           }
           setPagosAnualesStats(stats);
-          console.log(`Consulta Pagos: Estadísticas anuales calculadas:`, JSON.stringify(stats));
-        } else {
-          console.warn(`Consulta Pagos: No se encontraron pagos efectivos para ${pensionadoData.id}, 'pagosList' está vacío.`);
-          setPagosAnualesStats({});
+          console.log(`Consulta Pagos: Estadísticas calculadas:`, JSON.stringify(stats));
         }
         
-        // Actualizar contexto
+        // Actualizar contexto al final
         setContextPensionadoData(pensionadoData as Pensionado, pagosTemp as Pago[]);
-
+        console.log(`Consulta Pagos: Contexto actualizado con ${pagosTemp.length} pagos`);
 
       } else {
         setError("No se encontró el pensionado para ver detalles.");
         toast({ title: "No encontrado", description: "Error al cargar detalles del pensionado.", variant: "destructive" });
         setViewMode('list');
-        clearContextPensionadoData();
-        console.error(`Consulta Pagos: No se encontró documento de pensionado con ID: ${pensionadoId} en la ruta ${pensionadoDocRef.path}`);
+        console.error(`Consulta Pagos: No se encontró documento de pensionado con ID: ${pensionadoId}`);
       }
     } catch (err: any) {
       console.error("Error fetching pensioner details or payments:", err);
       setError("Ocurrió un error al cargar detalles: " + err.message);
+      
       let toastMessage = "No se pudo cargar la información del pensionado o sus pagos.";
-      if (err.message && err.message.includes("indexes") && (err.message.includes("año") || err.message.includes("fechaProcesado"))) {
-        toastMessage = `La consulta de pagos (ruta: ${PENSIONADOS_COLLECTION}/${pensionadoId}/${PAGOS_SUBCOLLECTION}) requiere un índice compuesto en Firestore. Campos del índice: año (DESC), fechaProcesado (DESC). Revisa la consola del navegador para ver el enlace y crearlo.`;
-      } else if (err.message && err.message.includes("indexes")) {
-         toastMessage = "La consulta de pensionados por filtro requiere un índice compuesto en Firestore. Revisa la consola del navegador para crearlo.";
+      if (err.message && err.message.includes("indexes")) {
+        if (err.message.includes("año") || err.message.includes("fechaProcesado")) {
+          toastMessage = `La consulta de pagos requiere un índice compuesto en Firestore. Campos: año (DESC), fechaProcesado (DESC). Ruta: ${PENSIONADOS_COLLECTION}/{pensionadoId}/${PAGOS_SUBCOLLECTION}`;
+        } else {
+          toastMessage = "La consulta requiere un índice compuesto en Firestore. Revisa la consola para crear el índice necesario.";
+        }
       }
+      
       toast({ title: "Error", description: toastMessage, variant: "destructive" });
       clearContextPensionadoData();
     } finally {
@@ -287,10 +314,125 @@ export default function ConsultaPagosPage() {
     }
   };
 
-  const handleSearch = () => {
-    clearContextPensionadoData(); // Limpiar contexto antes de una nueva búsqueda
-    setContextIsLoading(true);
+  // Nueva función para búsqueda de sugerencias
+  const searchSuggestions = async (searchTerm: string) => {
+    if (searchTerm.trim().length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
 
+    setIsSearching(true);
+    
+    try {
+      // Primero verificar si es un documento exacto
+      const pensionadoDocRef = doc(db, PENSIONADOS_COLLECTION, searchTerm);
+      const pensionadoDocSnap = await getDoc(pensionadoDocRef);
+
+      if (pensionadoDocSnap.exists()) {
+        // Si es un documento exacto, mostrarlo como única sugerencia
+        const exactMatch = { id: pensionadoDocSnap.id, ...pensionadoDocSnap.data() } as PensionadoLocal;
+        setSuggestions([exactMatch]);
+        setShowSuggestions(true);
+        setIsSearching(false);
+        return;
+      }
+
+      // Si no es documento exacto, buscar por nombre
+      const searchTermUpper = searchTerm.toUpperCase().trim();
+      const pensionadosQuery = query(
+        collection(db, PENSIONADOS_COLLECTION),
+        limit(10) // Limitar a 10 sugerencias
+      );
+      const pensionadosSnapshot = await getDocs(pensionadosQuery);
+      
+      const matchingPensionados: PensionadoLocal[] = [];
+      
+      pensionadosSnapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        const empleado = data.empleado || "";
+        
+        // Buscar coincidencias en el nombre
+        if (empleado.toUpperCase().includes(searchTermUpper)) {
+          matchingPensionados.push({ id: docSnap.id, ...data } as PensionadoLocal);
+        }
+      });
+
+      // Ordenar por relevancia (coincidencias que empiecen con el término primero)
+      const sortedMatches = matchingPensionados.sort((a, b) => {
+        const aEmpleado = (a.empleado || "").toUpperCase();
+        const bEmpleado = (b.empleado || "").toUpperCase();
+        
+        const aStartsWith = aEmpleado.startsWith(searchTermUpper);
+        const bStartsWith = bEmpleado.startsWith(searchTermUpper);
+        
+        if (aStartsWith && !bStartsWith) return -1;
+        if (!aStartsWith && bStartsWith) return 1;
+        
+        return aEmpleado.localeCompare(bEmpleado);
+      });
+
+      setSuggestions(sortedMatches.slice(0, 8)); // Mostrar máximo 8 sugerencias
+      setShowSuggestions(sortedMatches.length > 0);
+
+    } catch (err: any) {
+      console.error("Error searching suggestions:", err);
+      setSuggestions([]);
+      setShowSuggestions(false);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Debounce para la búsqueda de sugerencias
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (documentoInput.trim()) {
+        searchSuggestions(documentoInput.trim());
+      } else {
+        setSuggestions([]);
+        setShowSuggestions(false);
+      }
+    }, 300); // Esperar 300ms después de que el usuario deje de escribir
+
+    return () => clearTimeout(timeoutId);
+  }, [documentoInput]);
+
+  // Función para manejar la selección de una sugerencia
+  const handleSuggestionSelect = (pensionado: PensionadoLocal) => {
+    setDocumentoInput(pensionado.id);
+    setSuggestions([]);
+    setShowSuggestions(false);
+    
+    // Ejecutar búsqueda directa
+    toast({ 
+      title: "Pensionado seleccionado", 
+      description: `Cargando detalles de ${pensionado.empleado}...`,
+      variant: "default" 
+    });
+    
+    executeDocumentSearch(pensionado.id);
+  };
+
+  // Función para ocultar sugerencias cuando se hace clic fuera
+  const handleInputBlur = () => {
+    // Usar setTimeout para permitir que el click en una sugerencia se registre primero
+    setTimeout(() => {
+      setShowSuggestions(false);
+    }, 200);
+  };
+
+  // Función para mostrar sugerencias cuando se enfoca el input
+  const handleInputFocus = () => {
+    if (suggestions.length > 0) {
+      setShowSuggestions(true);
+    }
+  };
+
+  // Función auxiliar para búsqueda por documento
+  const executeDocumentSearch = (documentId: string) => {
+    clearContextPensionadoData();
+    setContextIsLoading(true);
     setSelectedPensionado(null);
     setPagosList([]);
     setPagosAnualesStats({});
@@ -299,90 +441,147 @@ export default function ConsultaPagosPage() {
     setCurrentPage(1);
     setLastVisibleDoc(null);
     setFirstVisibleDoc(null);
+    
+    fetchPensionadoDetails(documentId);
+  };
 
+  // Función para buscar por documento o nombre
+  const searchByDocumentOrName = async (searchTerm: string) => {
+    setIsLoading(true);
+    setError(null);
+    setSearchResults([]);
+    setSelectedPensionado(null);
+    setPagosList([]);
+    setPagosAnualesStats({});
+    clearContextPensionadoData();
+
+    try {
+      // Primero intentar búsqueda directa por documento (ID)
+      const pensionadoDocRef = doc(db, PENSIONADOS_COLLECTION, searchTerm);
+      const pensionadoDocSnap = await getDoc(pensionadoDocRef);
+
+      if (pensionadoDocSnap.exists()) {
+        // Si encontró por documento, cargar los detalles completos
+        console.log("Encontrado por documento directo:", searchTerm);
+        executeDocumentSearch(searchTerm);
+        return;
+      }
+
+      // Si no se encuentra por documento, buscar por nombre en el campo empleado
+      console.log("No encontrado por documento, buscando por nombre:", searchTerm);
+      
+      const searchTermUpper = searchTerm.toUpperCase().trim();
+      const pensionadosQuery = query(collection(db, PENSIONADOS_COLLECTION));
+      const pensionadosSnapshot = await getDocs(pensionadosQuery);
+      
+      const matchingPensionados: PensionadoLocal[] = [];
+      
+      pensionadosSnapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        const empleado = data.empleado || "";
+        
+        // Buscar en el campo empleado (nombre completo con documento)
+        if (empleado.toUpperCase().includes(searchTermUpper)) {
+          matchingPensionados.push({ id: docSnap.id, ...data } as PensionadoLocal);
+        }
+      });
+
+      if (matchingPensionados.length === 0) {
+        toast({ 
+          title: "Sin Resultados", 
+          description: `No se encontraron pensionados con el término: "${searchTerm}"`, 
+          variant: "default" 
+        });
+        setViewMode('initial');
+        return;
+      }
+
+      if (matchingPensionados.length === 1) {
+        // Si solo hay una coincidencia, cargar detalles directamente
+        const pensionado = matchingPensionados[0];
+        toast({ 
+          title: "Pensionado encontrado", 
+          description: `Cargando detalles de ${pensionado.empleado}...`,
+          variant: "default" 
+        });
+        executeDocumentSearch(pensionado.id);
+      } else {
+        // Si hay múltiples coincidencias, mostrar lista
+        setSearchResults(matchingPensionados);
+        setViewMode('list');
+        setTotalResults(matchingPensionados.length);
+        toast({ 
+          title: "Múltiples resultados", 
+          description: `Se encontraron ${matchingPensionados.length} pensionados que coinciden con "${searchTerm}"`,
+          variant: "default" 
+        });
+      }
+
+    } catch (err: any) {
+      console.error("Error en búsqueda por documento o nombre:", err);
+      setError("Ocurrió un error al buscar: " + err.message);
+      toast({ 
+        title: "Error de Búsqueda", 
+        description: "No se pudo completar la búsqueda.", 
+        variant: "destructive" 
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Modificar handleSearch para usar la nueva función
+  const handleSearch = () => {
     if (documentoInput.trim()) {
-      fetchPensionadoDetails(documentoInput.trim());
+      searchByDocumentOrName(documentoInput.trim());
     } else if (filterCentroCosto || filterDependencia) {
+      clearContextPensionadoData();
+      setContextIsLoading(true);
+      setSelectedPensionado(null);
+      setPagosList([]);
+      setPagosAnualesStats({});
+      setSearchResults([]);
+      setError(null);
+      setCurrentPage(1);
+      setLastVisibleDoc(null);
+      setFirstVisibleDoc(null);
+      
       fetchPensionadosByFilters(1);
     } else {
-      toast({ title: "Información requerida", description: "Ingrese un número de documento o seleccione filtros.", variant: "destructive" });
+      toast({ title: "Información requerida", description: "Ingrese un número de documento/nombre o seleccione filtros.", variant: "destructive" });
       setViewMode('initial');
       setContextIsLoading(false);
     }
   };
 
-  const handleNextPage = () => {
-    if (totalResults > ITEMS_PER_PAGE) {
-      fetchPensionadosByFilters(currentPage + 1, lastVisibleDoc);
-    }
+  // Simplificar handleVerDetalles para ejecutar búsqueda directa por documento
+  const handleVerDetalles = (pensionadoId: string, pensionadoNombre?: string) => {
+    // Poblar el campo de documento
+    setDocumentoInput(pensionadoId);
+    
+    // Limpiar filtros para evitar conflictos
+    setFilterCentroCosto(undefined);
+    setFilterDependencia(undefined);
+    
+    // Limpiar estado de lista
+    setSearchResults([]);
+    setViewMode('initial');
+    
+    // Mostrar toast informativo
+    toast({ 
+      title: "Cargando detalles", 
+      description: `Consultando información de ${pensionadoNombre || pensionadoId}...`,
+      variant: "default" 
+    });
+    
+    // Ejecutar la búsqueda directa por documento (que ya funciona perfectamente)
+    executeDocumentSearch(pensionadoId);
   };
 
-  const handlePrevPage = async () => {
-    if (currentPage > 1) {
-        fetchPensionadosByFilters(currentPage - 1, null);
-    }
-  };
-
-  const formatFirebaseTimestamp = (timestamp: Timestamp | undefined | string): string => {
-    if (!timestamp) return 'N/A';
-    try {
-      if (typeof timestamp === 'string') {
-        const d = new Date(timestamp);
-        if (isNaN(d.getTime())) return 'N/A'; 
-        return d.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
-      }
-       if (timestamp instanceof Timestamp) {
-         return timestamp.toDate().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
-       }
-       // Si es un objeto pero no Timestamp (podría ser de contexto serializado)
-       if (typeof timestamp === 'object' && timestamp.hasOwnProperty('seconds')) {
-        return new Date((timestamp as any).seconds * 1000).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
-       }
-      return 'N/A';
-    } catch (e) {
-      console.warn("Could not format timestamp:", timestamp, e);
-      return 'N/A';
-    }
-  };
-
-  const formatCurrency = (value: string | number | undefined | null, addSymbol: boolean = true): string => {
-    if (value === undefined || value === null) return addSymbol ? '$0,00' : '0,00';
-    let numValue = typeof value === 'string' ? parseCurrencyToNumber(value) : value;
-    if (isNaN(numValue)) return addSymbol ? '$0,00' : '0,00';
-    const prefix = addSymbol ? '$' : '';
-    return `${prefix}${numValue.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
-  const formatSexo = (sexoCode?: number): string => {
-    if (sexoCode === undefined) return 'N/A';
-    if (sexoCode === 1) return 'Masculino';
-    if (sexoCode === 2) return 'Femenino';
-    return 'N/A';
-  };
-
-  const formatRegimen = (regimenCode?: number): string => {
-    if (regimenCode === undefined) return 'N/A';
-    if (regimenCode === 1) return 'Régimen A';
-    if (regimenCode === 2) return 'Régimen B (Transición)';
-    return `Código ${regimenCode}`; 
-  };
-
-  const formatRiesgo = (riesgoCode?: string): string => {
-    if (!riesgoCode) return 'N/A';
-    if (riesgoCode === 'V') return 'Vejez';
-    if (riesgoCode === 'I') return 'Invalidez';
-    if (riesgoCode === 'S') return 'Sobrevivencia';
-    return riesgoCode; 
-  };
-  
-  const formatTranci = (tranciValue?: boolean): string => {
-    if (tranciValue === undefined) return 'N/A';
-    return tranciValue ? 'Sí' : 'No';
-  };
-
-
+  // Agregar esta función que faltaba
   const handleClearFiltersAndSearch = () => {
     clearContextPensionadoData();
+    setContextIsLoading(false);
     setDocumentoInput("");
     setFilterCentroCosto(undefined);
     setFilterDependencia(undefined);
@@ -395,7 +594,83 @@ export default function ConsultaPagosPage() {
     setCurrentPage(1);
     setLastVisibleDoc(null);
     setFirstVisibleDoc(null);
-    toast({ title: "Filtros limpiados", description: "Realice una nueva búsqueda."});
+    setIsLoading(false);
+    setIsListLoading(false);
+    toast({ title: "Filtros limpiados", description: "Realice una nueva búsqueda.", variant: "default" });
+  };
+
+  // Agregar también las funciones de paginación que faltan
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      fetchPensionadosByFilters(currentPage - 1, firstVisibleDoc);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (searchResults.length === ITEMS_PER_PAGE && totalResults > ITEMS_PER_PAGE) {
+      fetchPensionadosByFilters(currentPage + 1, lastVisibleDoc);
+    }
+  };
+
+  // Agregar las funciones de formateo que faltan
+  const formatFirebaseTimestamp = (timestamp: Timestamp | undefined | string | {seconds: number, nanoseconds: number}, options?: Intl.DateTimeFormatOptions): string => {
+    if (!timestamp) return 'N/A';
+    const defaultOptions: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' };
+    
+    try {
+      if (typeof timestamp === 'string') {
+        const date = new Date(timestamp);
+        return date.toLocaleDateString('es-ES', options || defaultOptions);
+      }
+      
+      if (timestamp instanceof Timestamp) {
+        return timestamp.toDate().toLocaleDateString('es-ES', options || defaultOptions);
+      }
+      
+      if (timestamp && typeof timestamp === 'object' && 'seconds' in timestamp) {
+        const date = new Date(timestamp.seconds * 1000);
+        return date.toLocaleDateString('es-ES', options || defaultOptions);
+      }
+      
+      return 'N/A';
+    } catch (e) {
+      console.error('Error formatting timestamp:', e);
+      return 'N/A';
+    }
+  };
+
+  const formatCurrency = (value: string | number | undefined | null, addSymbol: boolean = true): string => {
+    if (value === undefined || value === null) return 'N/A';
+    
+    let numValue = typeof value === 'string' ? parseCurrencyToNumber(value) : value;
+    if (isNaN(numValue)) return 'N/A';
+    
+    const prefix = addSymbol ? '$' : '';
+    return `${prefix}${numValue.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  const formatSexo = (sexo: number | undefined): string => {
+    if (sexo === undefined) return 'N/A';
+    return sexo === 1 ? 'Masculino' : sexo === 2 ? 'Femenino' : 'No especificado';
+  };
+
+  const formatRegimen = (regimen: number | undefined): string => {
+    if (regimen === undefined) return 'N/A';
+    switch (regimen) {
+      case 1: return 'Régimen Contributivo';
+      case 2: return 'Régimen Subsidiado';
+      default: return `Régimen ${regimen}`;
+    }
+  };
+
+  const formatRiesgo = (riesgo: string | undefined): string => {
+    if (!riesgo) return 'N/A';
+    return riesgo.charAt(0).toUpperCase() + riesgo.slice(1).toLowerCase();
+  };
+
+  const formatTranci = (tranci: boolean | undefined): string => {
+    if (tranci === undefined) return 'N/A';
+    return tranci ? 'Sí' : 'No';
   };
 
   const sortedYearsForStats = Object.keys(pagosAnualesStats).sort((a, b) => {
@@ -409,49 +684,94 @@ export default function ConsultaPagosPage() {
     <div className="space-y-6">
       <Card className="shadow-lg">
         <CardHeader>
- <CardTitle className="text-2xl font-headline text-primary flex items-center">
+          <CardTitle className="text-2xl font-headline text-primary flex items-center">
             <Search className="mr-3 h-7 w-7" /> Consulta y Resumen de Pagos
           </CardTitle>
           <CardDescription>
-            Busque por documento o filtre para listar pensionados y ver un resumen anual de sus pagos.
+            Busque por documento/nombre o filtre para listar pensionados y ver un resumen anual de sus pagos.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 items-end">
-            <div className="space-y-1 md:col-span-2 lg:col-span-1">
-              <Label htmlFor="documentoInput">Número de Documento</Label>
-              <Input id="documentoInput" type="text" value={documentoInput} onChange={(e) => setDocumentoInput(e.target.value)} placeholder="Buscar por documento" disabled={isLoading || isListLoading} className="text-base"/>
+            <div className="space-y-1 md:col-span-2 lg:col-span-1 relative">
+              <Label htmlFor="documentoInput">Documento o Nombre</Label>
+              <Input 
+                id="documentoInput" 
+                type="text" 
+                value={documentoInput} 
+                onChange={(e) => setDocumentoInput(e.target.value)} 
+                onFocus={handleInputFocus}
+                onBlur={handleInputBlur}
+                placeholder="Escriba documento o nombre..." 
+                disabled={isLoading || isListLoading} 
+                className="text-base"
+              />
+              
+              {/* Dropdown de sugerencias */}
+              {showSuggestions && (
+                <div className="absolute top-full left-0 right-0 z-50 bg-background border border-border rounded-md shadow-lg max-h-64 overflow-y-auto">
+                  {isSearching ? (
+                    <div className="p-3 text-center text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin mx-auto mb-2" />
+                      Buscando...
+                    </div>
+                  ) : suggestions.length > 0 ? (
+                    suggestions.map((pensionado) => (
+                      <div
+                        key={pensionado.id}
+                        className="p-3 hover:bg-muted cursor-pointer border-b border-border last:border-b-0 transition-colors"
+                        onClick={() => handleSuggestionSelect(pensionado)}
+                      >
+                        <div className="font-medium text-sm text-foreground">
+                          {pensionado.empleado || 'Sin nombre'}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Doc: {pensionado.id} | {pensionado.pnlDependencia?.replace(/^V\d+-/, '') || 'Sin dependencia'}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-3 text-center text-muted-foreground text-sm">
+                      No se encontraron coincidencias
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
+            
             <div className="space-y-1 lg:col-span-1">
-                <Label htmlFor="filterCentroCosto">Centro de Costo</Label>
-                <Select value={filterCentroCosto} onValueChange={(value) => setFilterCentroCosto(value === "ALL_CENTROS" ? undefined : value)} disabled={isLoading || isListLoading}>
-                    <SelectTrigger id="filterCentroCosto" className="text-base"><SelectValue placeholder="Todos" /></SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="ALL_CENTROS">Todos los Centros</SelectItem>
-                        {distinctCentroCostos.map(cc => <SelectItem key={cc} value={cc}>{cc}</SelectItem>)}
-                    </SelectContent>
-                </Select>
+              <Label htmlFor="filterCentroCosto">Centro de Costo</Label>
+              <Select value={filterCentroCosto} onValueChange={(value) => setFilterCentroCosto(value === "ALL_CENTROS" ? undefined : value)} disabled={isLoading || isListLoading}>
+                <SelectTrigger id="filterCentroCosto" className="text-base"><SelectValue placeholder="Todos" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL_CENTROS">Todos los Centros</SelectItem>
+                  {distinctCentroCostos.map(cc => <SelectItem key={cc} value={cc}>{cc}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
+            
             <div className="space-y-1 lg:col-span-1">
-                <Label htmlFor="filterDependencia">Dependencia</Label>
-                <Select value={filterDependencia} onValueChange={(value) => setFilterDependencia(value === "ALL_DEPENDENCIAS" ? undefined : value)} disabled={isLoading || isListLoading}>
-                    <SelectTrigger id="filterDependencia" className="text-base"><SelectValue placeholder="Todas" /></SelectTrigger>
-                    <SelectContent>
-                         <SelectItem value="ALL_DEPENDENCIAS">Todas las Dependencias</SelectItem>
-                        {distinctDependencias.map(dep => <SelectItem key={dep} value={dep}>{dep}</SelectItem>)}
-                    </SelectContent>
-                </Select>
+              <Label htmlFor="filterDependencia">Dependencia</Label>
+              <Select value={filterDependencia} onValueChange={(value) => setFilterDependencia(value === "ALL_DEPENDENCIAS" ? undefined : value)} disabled={isLoading || isListLoading}>
+                <SelectTrigger id="filterDependencia" className="text-base"><SelectValue placeholder="Todas" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL_DEPENDENCIAS">Todas las Dependencias</SelectItem>
+                  {distinctDependencias.map(dep => <SelectItem key={dep} value={dep}>{dep}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
+            
             <div className="flex flex-col sm:flex-row gap-2 lg:col-span-1">
-                <Button onClick={handleSearch} disabled={isLoading || isListLoading} className="w-full text-base">
-                    {(isLoading || isListLoading) ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Search className="mr-2 h-5 w-5" />}
-                    Buscar
-                </Button>
-                 <Button onClick={handleClearFiltersAndSearch} variant="outline" disabled={isLoading || isListLoading} className="w-full text-base">
-                    Limpiar
-                </Button>
+              <Button onClick={handleSearch} disabled={isLoading || isListLoading} className="w-full text-base">
+                {(isLoading || isListLoading) ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Search className="mr-2 h-5 w-5" />}
+                Buscar
+              </Button>
+              <Button onClick={handleClearFiltersAndSearch} variant="outline" disabled={isLoading || isListLoading} className="w-full text-base">
+                Limpiar
+              </Button>
             </div>
           </div>
+          
           {error && (
             <div className="mt-6 p-3 bg-destructive/10 border border-destructive/50 text-destructive rounded-md flex items-center text-sm">
               <AlertCircle className="mr-2 h-5 w-5 flex-shrink-0" /> {error}
@@ -464,7 +784,7 @@ export default function ConsultaPagosPage() {
         <Card className="shadow-md">
           <CardHeader>
             <CardTitle className="text-xl font-headline text-primary flex items-center">
- <ListChecks className="mr-2 h-6 w-6" /> Resultados de Búsqueda de Pensionados ({searchResults.length}{totalResults > ITEMS_PER_PAGE ? '+' : ''})
+              <ListChecks className="mr-2 h-6 w-6" /> Resultados de Búsqueda de Pensionados ({searchResults.length}{totalResults > ITEMS_PER_PAGE ? '+' : ''})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -487,8 +807,13 @@ export default function ConsultaPagosPage() {
                       <TableCell>{p.pnlCentroCosto || 'N/A'}</TableCell>
                       <TableCell>{p.pnlDependencia?.replace(/^V\d+-/, '') || 'N/A'}</TableCell>
                       <TableCell>
-                        <Button variant="outline" size="sm" onClick={() => fetchPensionadoDetails(p.id)} disabled={isLoading}>
-                          Ver Resumen
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => handleVerDetalles(p.id, p.empleado)} 
+                          disabled={isLoading}
+                        >
+                          Ver Detalles
                         </Button>
                       </TableCell>
                     </TableRow>
